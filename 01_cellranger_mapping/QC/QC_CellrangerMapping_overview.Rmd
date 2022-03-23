@@ -57,7 +57,7 @@ cellranger_metrics_gex <- merge(metadata_to_merge, cellranger_metrics_gex)
 ```{r}
 cellranger_metrics_gex_df <- clean_cellranger_metrics_df(cellranger_metrics_gex)
 cellranger_metrics_gex_df[,16:46] <- lapply(cellranger_metrics_gex_df[,16:46], FUN=as.numeric)
-# cellranger_metrics_gex_df <- cellranger_metrics_gex_df[, order(cellranger_metrics_gex_df$subproject,
+# cellranger_metrics_gex_df <- cellranger_metrics_gex_df[, order(cellranger_metrics_gex_df$tissue,
 #                                                        cellranger_metrics_gex_df$library_name)]
 ```
 
@@ -76,8 +76,25 @@ First, we will assess the quality of the sequenced libraries before the mapping 
 Q-score is calculated in the following way:
 $$Q = -10\log10(p)$$
 where *p* is the probability of the base being wrongly called. Thus, bases with a high Q-score are reliable.
+```{r fig.height = 11, fig.width = 14}
+gg_lib_size <- cellranger_metrics_gex_df %>%
+  mutate(Number_of_Reads_mil = lib__Number_of_reads / 1000000) %>%
+  ggplot(aes(x = library_name, y = Number_of_Reads_mil, fill = sample_protocol)) +
+  geom_bar(stat = "identity") +
+  facet_grid(~tissue, scales = "free_x", space = "free") +
+  theme_bw() +
+  scale_fill_brewer(palette = "Set2") +
+  labs(title = "Library size",
+    x = "Libraries", 
+    y =  "Number Reads (in millions)") +
+  theme(axis.title = element_text(size = 12),
+        axis.text = element_text(size = 8),
+          axis.text.x = element_text(hjust = 1, angle = 45),
+        strip.placement = "outside",
+        strip.background = element_rect(colour = NA),
+        legend.position = "bottom") +
+  guides(fill = guide_legend(override.aes = list(size = 5), ncol = 3))
 
-```{r fig.height = 6, fig.width = 14}
 qc_seq_vars <- c("lib__Q30_barcodes",
                  "lib__Q30_RNA_read",
                  "lib__Q30_UMI")
@@ -85,7 +102,7 @@ qc_seq_vars <- c("lib__Q30_barcodes",
 gg_qc_seq <- purrr::map(qc_seq_vars, function(var) {
   ggplot(cellranger_metrics_gex_df, aes_string(x = "library_name", y = var, fill = "sample_protocol")) +
     geom_col() +
-    facet_grid(~subproject, scales = "free_x", space = "free") +
+    facet_grid(~tissue, scales = "free_x", space = "free") +
     theme_bw() +
     scale_fill_brewer(palette = "Set2") +
     ylim(0, 100) +
@@ -100,13 +117,13 @@ gg_qc_seq <- purrr::map(qc_seq_vars, function(var) {
           legend.position = "none")
 })
 
-ggarrange(plotlist = gg_qc_seq, nrow = 1, ncol = 3)
+ggarrange(plotlist = c(list(gg_lib_size), gg_qc_seq), nrow = 2, ncol = 2)
 ```
 
 ## Mapping QC
 Next, we will check the quality of the mapping step performed by `cellranger 5.0.0` across libraries. To do so, we will compare the percentage of reads mapped to the genome, and within these mapped reads, the amount of reads mapped to intergenic regions, intronic and exonic regions. We aim to obtain libraries with a high percentage of confidently mapped reads, and specially a high percentage of exonic reads, which correspond with gene expression or RNAs. The reads mapping to intergenic regions suggest contamination of ambient DNA, whereas reads mapping to intronic regions may come from pre-mRNAs or mature spliced isoforms that retain certain introns.
 
-```{r fig.height = 10, fig.width = 14}
+```{r fig.height = 11, fig.width = 14}
 qc_map_vars <- c("lib__Confidently_mapped_to_genome",
                  "lib__Confidently_mapped_antisense",
                  "lib__Confidently_mapped_to_intergenic_regions",
@@ -118,7 +135,7 @@ qc_map_vars <- c("lib__Confidently_mapped_to_genome",
 gg_qc_map <- purrr::map(qc_map_vars, function(var) {
   ggplot(cellranger_metrics_gex_df, aes_string(x = "library_name", y = var, fill = "sample_protocol")) +
     geom_col() +
-    facet_grid(~subproject, scales = "free_x", space = "free") +
+    facet_grid(~tissue, scales = "free_x", space = "free") +
     theme_bw() +
     scale_fill_brewer(palette = "Set2") +
     ylim(0, 100) +
@@ -140,29 +157,28 @@ ggarrange(plotlist = gg_qc_map, nrow = 2, ncol = 3)
 After assessing mapped reads, it is important to test which is the sequencing saturation and depth for each library. The sequencing saturation is dependent on the library complexity and sequencing depth. The library complexity is the total number of different transcripts present in the library and it varies between the cell types/tissues, whereas the sequencing depth is the number of Set2 reads per cell. For this reason, we will plot the number of detected genes as a function of depth (sequenced reads). As sequencing depth increases, more genes are detected, but this function reaches a plateau, whereby more sequenced reads does not result in more detected genes; therefore, at this point we assure we sequenced until saturation. More specifically, the sequencing saturation the fraction of confidently mapped, valid cell-barcode, valid UMI reads that had a non-unique (cell-barcode, UMI, gene).
 
 ```{r fig.height = 11, fig.width = 14}
-gg_lib_size <- cellranger_metrics_gex_df %>%
-  mutate(Number_of_Reads_mil = lib__Number_of_reads / 1000000) %>%
-  ggplot(aes(x = library_name, y = Number_of_Reads_mil, fill = sample_protocol)) +
-  geom_bar(stat = "identity") +
-  facet_grid(~subproject, scales = "free_x", space = "free") +
+gg_qc_samplesize_cells <- cellranger_metrics_gex_df %>%
+  mutate(Number_of_Reads_mil = sample__Number_of_reads_assigned_to_the_sample / 1000000) %>%
+  ggplot(aes(x = sample__Cells,
+             y = Number_of_Reads_mil, color = sample_protocol)) +
+  geom_point(aes(shape=tissue), size = 3) +
   theme_bw() +
-  scale_fill_brewer(palette = "Set2") +
-  labs(title = "Library size",
-    x = "Libraries", 
-    y =  "Number Reads (in millions)") +
+  scale_color_brewer(palette = "Set2") +
+  geom_text_repel(aes(label = library_name), size = 3) +
+  labs(title = "Sample size",
+       x = "Number of cells", 
+       y = "Number of reads (in thousands)") +
   theme(axis.title = element_text(size = 12),
         axis.text = element_text(size = 8),
-          axis.text.x = element_text(hjust = 1, angle = 45),
-        strip.placement = "outside",
-        strip.background = element_rect(colour = NA),
-        legend.position = "none")
+        #legend.position = "none"
+        )
 
 gg_qc_seq_sat <- cellranger_metrics_gex_df %>%
   mutate(Sequencing_Saturation_perc = lib__Sequencing_saturation / 100,
-         Mean_Reads_per_Cell_tho = as.numeric(lib__Mean_reads_per_cell) / 1000) %>%
+         Mean_Reads_per_Cell_tho = lib__Mean_reads_per_cell / 1000) %>%
   ggplot(aes(x = Mean_Reads_per_Cell_tho,
              y = Sequencing_Saturation_perc, color = sample_protocol)) +
-  geom_point() +
+  geom_point(aes(shape=tissue), size = 3) +
   theme_bw() +
   scale_color_brewer(palette = "Set2") +
   ylim(0, 1) +
@@ -171,23 +187,23 @@ gg_qc_seq_sat <- cellranger_metrics_gex_df %>%
        x = "Mean Reads per Cell (in thousands)", 
        y = "") +
   theme(axis.title = element_text(size = 12),
-        axis.text = element_text(size = 10),
-        #legend.position = "none"
+        axis.text = element_text(size = 8),
+        legend.position = "none"
         )
 
 gg_qc_seq_depth_cell <- cellranger_metrics_gex_df %>%
   mutate(Median_Reads_per_Cell_tho = sample__Median_reads_per_cell / 1000) %>%
   ggplot(aes(x = Median_Reads_per_Cell_tho,
-             y = sample__Median_genes_per_cell, color = sample_protocol)) +
-  geom_point() +
+             y = sample__Median_UMI_counts_per_cell, color = sample_protocol)) +
+  geom_point(aes(shape=tissue), size = 3) +
   theme_bw() +
   scale_color_brewer(palette = "Set2") +
   geom_text_repel(aes(label = library_name), size = 4) +
   labs(x = "Median Reads per Cell (in thousands)",
-       y = "Median Detected Genes per Cell") +
+       y = "Median UMI counts per Cell") +
   theme(axis.title = element_text(size = 12),
-        axis.text = element_text(size = 10),
-        #legend.position = "none"
+        axis.text = element_text(size = 8),
+        legend.position = "none"
         )
 
 
@@ -195,18 +211,18 @@ gg_qc_seq_depth <- cellranger_metrics_gex_df %>%
   mutate(Number_of_Reads_mil = sample__Number_of_reads_assigned_to_the_sample / 1000000) %>%
   ggplot(aes(x = Number_of_Reads_mil,
              y = sample__Total_genes_detected, color = sample_protocol)) +
-  geom_point() +
+  geom_point(aes(shape=tissue), size = 3) +
   theme_bw() +
   scale_color_brewer(palette = "Set2") +
   geom_text_repel(aes(label = library_name), size = 4) +
   labs(x = "Number of Reads (in millions)", 
        y = "Total Genes Detected") +
   theme(axis.title = element_text(size = 12),
-        axis.text = element_text(size = 10),
-        #legend.position = "none"
+        axis.text = element_text(size = 8),
+        legend.position = "none"
         )
 
-cowplot::plot_grid(gg_lib_size, gg_qc_seq_sat, 
+cowplot::plot_grid(gg_qc_samplesize_cells, gg_qc_seq_sat, 
                    gg_qc_seq_depth_cell, gg_qc_seq_depth, 
                    nrow = 2, ncol = 2)
 ```

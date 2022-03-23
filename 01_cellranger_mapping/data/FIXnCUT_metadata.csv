@@ -1,5 +1,10 @@
-"project","project_subfolder","subproject","gem_id","library_id","library_name","library_barcode","type","chemistry","expect_cells","hashing","organism","tissue","disease","sample_protocol","fixation_time"
-"SCGTEST","FIXnCUT","SCGTEST_32","u94xuqj4_hr2dtesw",237698,"Lung_fresh","AW6053","cDNA","SC3Pv3",7000,"not_hashed","Mouse","Lung","Healthy","Fresh","0h"
-"SCGTEST","FIXnCUT","SCGTEST_32","dpq5on9o_5ypmeytx",237700,"Lung_fixed_24h","AW6055","cDNA","SC3Pv3",7000,"not_hashed","Mouse","Lung","Healthy","Fix&Cut","24h"
-"SCGTEST","FIXnCUT","SCGTEST_32","xoxslu7q_8nia4zwr",237699,"Colon_fresh","AW6054","cDNA","SC3Pv3",7000,"not_hashed","Mouse","Colon","Healthy","Fresh","0h"
-"SCGTEST","FIXnCUT","SCGTEST_32","bmgc51ex_jits5na1",237701,"Colon_fixed_24h","AW6056","cDNA","SC3Pv3",7000,"not_hashed","Mouse","Colon","Healthy","Fix&Cut","24h"
+project,project_subfolder,subproject,gem_id,library_id,library_name,library_barcode,type,chemistry,expect_cells,hashing,organism,tissue,disease,sample_protocol
+SCGTEST,FIXnCUT,SCGTEST_32,u94xuqj4_hr2dtesw,237698,Lung_fresh_0,AW6053,cDNA,SC3Pv3,7000,not_hashed,Mouse,Lung,Healthy,Fresh
+SCGTEST,FIXnCUT,SCGTEST_32,dpq5on9o_5ypmeytx,237700,Lung_fixed_24h_0,AW6055,cDNA,SC3Pv3,7000,not_hashed,Mouse,Lung,Healthy,Fix&Cut_24h
+SCGTEST,FIXnCUT,SCGTEST_32,xoxslu7q_8nia4zwr,237699,Colon_fresh,AW6054,cDNA,SC3Pv3,7000,not_hashed,Mouse,Colon,Healthy,Fresh
+SCGTEST,FIXnCUT,SCGTEST_32,bmgc51ex_jits5na1,237701,Colon_fixed_24h,AW6056,cDNA,SC3Pv3,7000,not_hashed,Mouse,Colon,Healthy,Fix&Cut_24h
+SCGTEST,FIXnCUT,SCGTEST_33,pfgvxfe6_ftr5tlpm,243891,Lung_fresh,AX2432,cDNA,SC3Pv3,8000,not_hashed,Mouse,Lung,Healthy,Fresh
+SCGTEST,FIXnCUT,SCGTEST_33,btvimge6_fuk14b5o,243892,Lung_cryo,AX2433,cDNA,SC3Pv3,10000,not_hashed,Mouse,Lung,Healthy,Cryopreservation
+SCGTEST,FIXnCUT,SCGTEST_33,wa4ylezj_f7kjs3op,243893,Lung_fixed_24h,AX2434,cDNA,SC3Pv3,10000,not_hashed,Mouse,Lung,Healthy,Fix&Cut_24h
+SCGTEST,FIXnCUT,SCGTEST_33,uyzd7xqc_jkya4jyl,243894,Lung_fixed_cryo,AX2435,cDNA,SC3Pv3,10000,not_hashed,Mouse,Lung,Healthy,Fix&Cut+Cryopreservation
+SCGTEST,FIXnCUT,SCGTEST_33,pbx8gfoi_esb8tlli,243895,Lung_fixed_7days,AX2436,cDNA,SC3Pv3,10000,not_hashed,Mouse,Lung,Healthy,Fix&Cut_7d
