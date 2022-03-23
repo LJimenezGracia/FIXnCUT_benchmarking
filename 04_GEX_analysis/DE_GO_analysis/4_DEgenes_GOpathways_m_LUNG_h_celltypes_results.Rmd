@@ -1,0 +1,256 @@
+---
+title: "Differential Expression Analysis (DEA)"
+author: "Laura Jiménez Gracia"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# Introduction
+We aim to find the transcriptional signatures associated with a particular condition.
+
+## Objective
+In this Rmarkdown document, we will explore the results of the Differential Expression Analysis (DEA) between the different levels associated to a particular condition.
+
+# Pre-processing
+## Libraries
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(ggrepel)
+#library(enrichR)
+```
+
+## Parameters
+Here we will define and load objects and functions that will be used throughout the document.
+```{r}
+# Paths
+path_r_objects <- here::here("04_GEX_analysis/DE_GO_analysis/results/R_objects")
+path_r_tables <- here::here("04_GEX_analysis/DE_GO_analysis/results/tables")
+path_r_figs <- here::here("04_GEX_analysis/DE_GO_analysis/results/figs")
+
+# Functions
+source(here::here("bin/utils.R"))
+
+# Define comparison parameters
+comparison_name_list <- c("Fixed24h_vs_Fresh", "Fixed7d_vs_Fresh", "Cryo_vs_Fresh", "FixedCryo_vs_Fresh")
+group_1_list <- c("Fix&Cut_24h", "Fix&Cut_7d", "Cryopreservation", "Fix&Cut+Cryopreservation")
+group_2_list <- c("Fresh", "Fresh", "Fresh", "Fresh")
+```
+
+```{r, echo=FALSE,include = FALSE}
+# You need this code to conduct the magic dependences attaching...
+DT::datatable(matrix())
+```
+
+# DEA across each cell-types
+```{r fig.height=20, fig.width=20, results='asis'}
+for (index in 1:length(comparison_name_list)) {
+  comparison_name <- comparison_name_list[[index]]
+  group_1 <- group_1_list[[index]]
+  group_2 <- group_2_list[[index]]
+  
+  # Define comparison paths
+  #path_volcanoplot <- paste0(path_r_figs, "/post12_cd45neg_DEgenes_", comparison_name, ".png")
+  #path_GO_results <- paste0(path_r_tables, "/post12_cd45neg_GOBP21_", comparison_name, ".xlsx")
+  
+  # Load data
+  path_object <- paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_DEgenes_cells1_", comparison_name, ".rds")
+  DE_genes_bycell <- readRDS(path_object)
+  
+  
+  # Data exploration
+  print(paste0("COMPARISON: ", comparison_name, ": ", group_1, " vs ", group_2))
+  
+  df <- data.frame(matrix(ncol = 4, nrow = length(DE_genes_bycell)))
+  colnames(df) <- c('CELLTYPES',
+                    'Number of significant DE genes (padj < 0.05)',
+                    'Number of sDEgenes UP-regulated (& Log2FC > 0.25)',
+                    'Number of sDEgenes DOWN-regulated (& Log2FC < -0.25)')
+  for (index in 1:length(DE_genes_bycell)) {
+    celltype <- names(DE_genes_bycell[index])
+    # Get values
+    sDE <- sum(DE_genes_bycell[[celltype]]$is_significant == TRUE)
+    sDE_up <- sum(DE_genes_bycell[[celltype]]$avg_log2FC[DE_genes_bycell[[celltype]]$is_significant == TRUE] > 0)
+    sDE_up_FC <- sum(DE_genes_bycell[[celltype]]$avg_log2FC[DE_genes_bycell[[celltype]]$is_significant == TRUE] > 0.25)
+    sDE_down <- sum(DE_genes_bycell[[celltype]]$avg_log2FC[DE_genes_bycell[[celltype]]$is_significant == TRUE] < 0)
+    sDE_down_FC <- sum(DE_genes_bycell[[celltype]]$avg_log2FC[DE_genes_bycell[[celltype]]$is_significant == TRUE] < -0.25)   
+    # Fill df
+    df[index,]$CELLTYPES <- celltype
+    df[index,]$`Number of significant DE genes (padj < 0.05)` <- sDE
+    df[index,]$`Number of sDEgenes UP-regulated (& Log2FC > 0.25)` <- paste0(sDE_up, " (", sDE_up_FC, ")") 
+    df[index,]$`Number of sDEgenes DOWN-regulated (& Log2FC < -0.25)` <- paste0(sDE_down, " (", sDE_down_FC, ")")
+  }
+  cat(knitr::knit_print(DT::datatable(df, height = "100%", width = "100%", options = list(scrollX = TRUE))))  
+  
+  ## Volcano Plot
+  gg_volcanoplot_list <- purrr::map2(DE_genes_bycell, names(DE_genes_bycell),  function(DE_genes, celltype) {
+    gg <- gg_volcano_DEgenes(
+      DEgenes_df = DE_genes, 
+      title = celltype, 
+      ident_1 = group_1,
+      ident_2 = group_2,
+      threshold_log2FC = 0.25,
+      threshold_adjpval = -log10(0.05)
+    ) + theme(legend.position = "none")
+    gg
+  })
+  
+  gg_volcanoplot_bycell <- cowplot::plot_grid(plotlist = gg_volcanoplot_list, ncol = 4)
+  print(gg_volcanoplot_bycell)
+
+  # Save results
+  #ggsave(filename = path_volcanoplot, plot = gg_volcanoplot_bycell)
+}
+```
+
+
+## Comparison across preservation protocols
+```{r}
+abs_log2FC <- 0.25
+```
+
+### UP-sDE
+```{r fig.height=5, fig.width=7}
+celltypes_names <- c("Alveolar macrophages", "B cells", "Endothelial cells", "Fibroblasts", "Monocytes/Macrophages/DCs", "Myofibroblasts",
+                     "Neutrophils", "NK cells", "Pheumocytes Type I", "Pneumocytes Type II", "Pulmonary Endothelial cells", "T cells")
+
+for (celltype in celltypes_names) {
+
+  print(celltype)
+  DE_genes_list <- list()
+
+  for (index in 1:length(comparison_name_list)) {
+    comparison_name <- comparison_name_list[[index]]
+    group_1 <- group_1_list[[index]]
+    group_2 <- group_2_list[[index]]
+    
+    # Load data
+    path_object <- paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_DEgenes_cells1_", comparison_name, ".rds")
+    DE_genes_bycell <- readRDS(path_object)
+    
+    print(paste0(comparison_name, ": ", group_1, " vs ", group_2))
+    ## Pre-processing
+    DE_genes <- DE_genes_bycell[[celltype]]
+    
+    DE_genes_filt <- DE_genes %>% 
+      dplyr::filter(is_significant & avg_log2FC > abs_log2FC) %>% 
+      dplyr::select(gene)
+    print(length(DE_genes_filt$gene))
+    
+    DE_genes_list[index] <- DE_genes_filt
+  }
+  
+  names(DE_genes_list) <- group_1_list
+
+  sDE_UP_intersect <- Reduce(intersect,
+       list(DE_genes_list$`Fix&Cut_24h`,
+            DE_genes_list$`Fix&Cut_7d`,
+            DE_genes_list$Cryopreservation,DE_genes_list$`Fix&Cut+Cryopreservation`
+            )
+       )
+  print(sDE_UP_intersect)  
+  
+  # Plot UP-regulated
+  p <- UpSetR::upset(
+    UpSetR::fromList(list(
+      "Fix&Cut_24h" = DE_genes_list$`Fix&Cut_24h`,
+      "Fix&Cut_7d" = DE_genes_list$`Fix&Cut_7d`,
+      "Cryopreservation" = DE_genes_list$Cryopreservation,
+      "Fix&Cut+Cryopreservation" = DE_genes_list$`Fix&Cut+Cryopreservation`
+    )),
+    nsets = 6,
+    order.by = "freq",
+    #group.by = "sets",
+    mainbar.y.label = "# Genes", sets.x.label = "# Genes / sample",
+    point.size = 4, line.size = 1,
+    empty.intersections = "on",
+    queries = list(
+       list(query = UpSetR::intersects, 
+            params = list("Fix&Cut_24h", "Fix&Cut_7d", "Cryopreservation", "Fix&Cut+Cryopreservation"), 
+            color = "orange", active = T)
+    )
+  )
+  
+  print(p)
+}
+```
+
+### DOWN-sDE
+```{r fig.height=5, fig.width=7}
+celltypes_names <- c("Alveolar macrophages", "B cells", "Endothelial cells", "Fibroblasts", "Monocytes/Macrophages/DCs", "Myofibroblasts",
+                     "Neutrophils", "NK cells", "Pheumocytes Type I",  "Pulmonary Endothelial cells", "T cells") #"Pneumocytes Type II",
+
+for (celltype in celltypes_names) {
+
+  print(celltype)
+  DE_genes_list <- list()
+
+  for (index in 1:length(comparison_name_list)) {
+    comparison_name <- comparison_name_list[[index]]
+    group_1 <- group_1_list[[index]]
+    group_2 <- group_2_list[[index]]
+    
+    # Load data
+    path_object <- paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_DEgenes_cells1_", comparison_name, ".rds")
+    DE_genes_bycell <- readRDS(path_object)
+    
+    print(paste0(comparison_name, ": ", group_1, " vs ", group_2))
+    ## Pre-processing
+    DE_genes <- DE_genes_bycell[[celltype]]
+    
+    DE_genes_filt <- DE_genes %>% 
+      dplyr::filter(is_significant & avg_log2FC < -abs_log2FC) %>% 
+      dplyr::select(gene)
+    print(length(DE_genes_filt$gene))
+    
+    DE_genes_list[index] <- DE_genes_filt
+  }
+  
+  names(DE_genes_list) <- group_1_list
+
+  sDE_DOWN_intersect <- Reduce(intersect,
+       list(DE_genes_list$`Fix&Cut_24h`,
+            DE_genes_list$`Fix&Cut_7d`,
+            DE_genes_list$Cryopreservation,DE_genes_list$`Fix&Cut+Cryopreservation`
+            )
+       )
+  print(sDE_DOWN_intersect)
+  
+  
+  # Plot DOWN-regulated
+  p <- UpSetR::upset(
+    UpSetR::fromList(list(
+      "Fix&Cut_24h" = DE_genes_list$`Fix&Cut_24h`,
+      "Fix&Cut_7d" = DE_genes_list$`Fix&Cut_7d`,
+      "Cryopreservation" = DE_genes_list$Cryopreservation,
+      "Fix&Cut+Cryopreservation" = DE_genes_list$`Fix&Cut+Cryopreservation`
+    )),
+    nsets = 6,
+    order.by = "freq",
+    #group.by = "sets",
+    mainbar.y.label = "# Genes", sets.x.label = "# Genes / sample",
+    point.size = 4, line.size = 1,
+    empty.intersections = "on",
+    queries = list(
+       list(query = UpSetR::intersects, 
+            params = list("Fix&Cut_24h", "Fix&Cut_7d", "Cryopreservation", "Fix&Cut+Cryopreservation"), 
+            color = "orange", active = T)
+    )
+  )
+  
+  print(p)
+}
+```
+
+# Session info
+```{r}
+sessionInfo()
+```

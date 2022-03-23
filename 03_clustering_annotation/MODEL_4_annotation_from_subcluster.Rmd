@@ -1,0 +1,291 @@
+---
+title: "Annotation (by cell type) from subclusters"
+author: "Laura Jiménez Gracia"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# Introduction
+
+## Objective
+In this Rmarkdown document, we are going to merge cell type identities annotated by independent cell-lineage analysis into a single one.
+
+# Pre-processing
+## Libraries
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(Seurat)
+library(dittoSeq)
+library(DT)
+```
+
+## Parameters
+Here we will define and load objects and functions that will be used throughout the document.
+```{r}
+# Paths
+path_project_metadata <- here::here("01_cellranger_mapping/data/POST_12_metadata.csv")
+path_samples_metadata <- here::here("01_cellranger_mapping/data/POST_12_metadata_samples_all.csv")
+path_r_objects <- here::here("03_clustering_annotation/results/R_objects")
+path_r_tables <- here::here("03_clustering_annotation/results/tables")
+path_r_figs <- here::here("03_clustering_annotation/results/figs")
+
+# Functions
+source(here::here("bin/utils.R"))
+
+# Parameters
+confounder_variables <- c("library_name", "sample_id", "genotype", "treatment")
+confounder_names <- c("Library", "Sample", "Genotype", "Treatment")
+
+metadata_variables_confounder <- c("nCount_RNA", "nFeature_RNA", "gem_id", 
+                                   "pct_mt", "pct_rb", "Phase",
+                                   "library_name", "sample_id", "genotype", "treatment")
+
+# Color palette
+set.seed(1234) # for reproducibility
+color_palette <- Polychrome::createPalette(60, c("#fc6060", "#74f774", "#7c7cfc"))
+names(color_palette) <- NULL
+#Polychrome::swatch(color_palette)
+```
+
+## Load data
+The data used in this Rmarkdown document comes from **POST_12** dataset.
+```{r}
+# Load all metadata information
+metadata <- read.csv(path_project_metadata)
+
+# Merging metadata_all tables
+metadata <- metadata %>% filter(type == "cDNA" & fraction == "CD45-")
+
+print("Libraries/Samples metadata")
+DT::datatable(metadata, options = list(scrollX = TRUE))
+
+# Load Seurat object
+seurat_obj <- readRDS(paste0(path_r_objects, "/post12_cd45neg_cells1_clustering_annotation.rds"))
+Idents(seurat_obj) <- "celltypes_1"
+seurat_obj
+```
+
+
+## Integrate cell-types identity
+```{r}
+seurat_obj$celltypes_1 <- as.character(seurat_obj$celltypes_1)
+seurat_obj$celltypes_2 <- as.character(seurat_obj$celltypes_1)
+
+
+celltypes_1_list <- c("Stromal cells", "Epidermal cells")
+celltypes_1_filenames <- c("stromal", "epidermal")
+
+# Load & add cell-type annotations
+for (i in 1:length(celltypes_1_list)) {
+  celltype <- celltypes_1_list[i]
+  filename <- celltypes_1_filenames[i]
+  file_path <- paste0(path_r_objects, "/post12_cd45neg_", filename, "_annotations.rds")
+  # loading annotations
+  annot <- readRDS(file_path)
+  # adding cell_types labels
+  seurat_obj$celltypes_2[seurat_obj$celltypes_1 == celltype] <- as.character(annot$celltypes_2)
+}
+```
+
+
+## Remove CD45+ cells
+```{r}
+seurat_obj <- seurat_obj[, seurat_obj$celltypes_2 != "Immune cells (CD45+)"]
+```
+
+## Modify metadata
+```{r}
+# Correct cell2 to cell1 "name pairing "lineage"
+# "Stromal cells cycling" belong to "Stromal cells" (lineage) but clustered with "Epidermal cells" 
+seurat_obj$celltypes_1[seurat_obj$celltypes_2 == "Stromal cells cycling"] <- "Stromal cells"
+
+# Reorder cells
+seurat_obj$celltypes_1 <- as.factor(seurat_obj$celltypes_1)
+seurat_obj$celltypes_1 <- factor(x = seurat_obj$celltypes_1,
+                                     levels = c(
+                                       "Stromal cells",
+                                       "Epidermal cells",
+                                       "Endothelial cells",
+                                       "Lymphatic Endothelial cells",
+                                       "Pericytes",
+                                       "Schwann cells"
+                                       )
+                                 )
+                                       
+# Reorder cells
+seurat_obj$celltypes_2 <- as.factor(seurat_obj$celltypes_2)
+seurat_obj$celltypes_2 <- factor(x = seurat_obj$celltypes_2,
+                                     levels = c(
+                                       "Basal keratinocytes",
+                                       "Basal keratinocytes cycling",
+                                       "Supra-Basal keratinocytes",
+                                       "Granular keratinocytes",
+                                       "Cornified keratinocytes",
+                                       "Dead keratinocytes",
+                                       "Chondrocytes",
+                                       "Dermal fibrocytes",
+                                       "Reticular fibroblasts",
+                                       "Universal fibroblasts",
+                                       "Hair dermal sheath",
+                                       "Inner ear fibroblasts",
+                                       "Vascular smooth muscle",
+                                       "Stromal cells cycling",
+                                       "Skeletal muscle",
+                                       "Endothelial cells",
+                                       "Lymphatic Endothelial cells",
+                                       "Pericytes",
+                                       "Schwann cells"
+                                     )
+                                 )
+```
+
+
+# Explore data annotation
+## Data visualization
+### Cell types 1
+
+```{r fig.width=14, fig.height=10}
+# Clustering overview
+gg_umap_clustering_celltypes_1 <- DimPlot(object = seurat_obj,
+        group.by = "celltypes_1",
+        label = FALSE,
+        cols = color_palette,
+        raster = FALSE
+        ) +
+  guides(color = guide_legend(override.aes = list(size = 5), ncol = 1))
+gg_umap_clustering_celltypes_1
+
+ggsave(filename = paste0(path_r_figs, "/post12_cd45neg_cells1_clustering_annotation_umap.png"),
+       plot = gg_umap_clustering_celltypes_1)
+```
+
+Now, we will also explore lineage clusters across sample
+```{r fig.width=25, fig.height=6}
+DimPlot(
+  object = seurat_obj,
+  group.by = "celltypes_1",
+  split.by = "sample_id",
+  label = FALSE,
+  cols = color_palette
+  )  +
+    theme(legend.position = "bottom") +
+  guides(color = guide_legend(override.aes = list(size = 5), ncol = 5))
+```
+
+### Cell types 2
+```{r fig.width=14, fig.height=10}
+# Clustering overview
+gg_umap_clustering_celltypes_2 <- DimPlot(
+  object = seurat_obj,
+        group.by = "celltypes_2",
+        label = FALSE,
+        cols = color_palette,
+        raster = FALSE
+        ) +
+  guides(color = guide_legend(override.aes = list(size = 5), ncol = 1))
+gg_umap_clustering_celltypes_2
+
+ggsave(filename = paste0(path_r_figs, "/post12_cd45neg_cells2_clustering_annotation_umap.png"),
+       plot = gg_umap_clustering_celltypes_2)
+```
+
+Now, we will also explore lineage clusters across sample
+```{r fig.width=25, fig.height=6}
+DimPlot(
+  object = seurat_obj,
+  group.by = "celltypes_2",
+  split.by = "sample_id",
+  label = FALSE,
+  cols = color_palette
+  ) + 
+  theme(legend.position = "bottom") +
+  guides(color = guide_legend(override.aes = list(size = 5), ncol = 6))
+```
+
+
+## Cell proportions
+### Cell types 1
+```{r fig.width=14, fig.height=5}
+gg_cell_num <- dittoBarPlot(seurat_obj, 
+                            "celltypes_1",
+                            group.by = "sample_id",
+                            scale = "count",
+                            retain.factor.levels = TRUE,
+                            legend.show = FALSE,
+                            color.panel = color_palette)
+
+gg_cell_prop <- dittoBarPlot(seurat_obj, 
+                             "celltypes_1",
+                             group.by = "sample_id",
+                             scale = "percent",
+                            retain.factor.levels = TRUE,
+                             color.panel = color_palette)
+
+gg_cell_num + gg_cell_prop
+```
+
+### Cell types 2
+```{r fig.width=14, fig.height=7}
+gg_cell_num <- dittoBarPlot(seurat_obj, 
+                            "celltypes_2",
+                            group.by = "sample_id",
+                            scale = "count",
+                            retain.factor.levels = TRUE,
+                            legend.show = FALSE,
+                            color.panel = color_palette)
+
+gg_cell_prop <- dittoBarPlot(seurat_obj, 
+                             "celltypes_2",
+                             group.by = "sample_id",
+                             scale = "percent",
+                             retain.factor.levels = TRUE,
+                             color.panel = color_palette) 
+
+gg_cell_num + gg_cell_prop
+```
+
+## Number of cells
+```{r}
+length(table(seurat_obj$celltypes_1))
+as.data.frame(table(seurat_obj$celltypes_1))
+
+length(table(seurat_obj$celltypes_2))
+as.data.frame(table(seurat_obj$celltypes_2))
+```
+
+
+```{r}
+data.frame(table(seurat_obj$sample_id, seurat_obj$celltypes_1))
+data.frame(table(seurat_obj$sample_id, seurat_obj$celltypes_2))
+```
+
+
+# Save data
+```{r}
+# Save metadata
+seurat_obj_metadata_df <- seurat_obj@meta.data
+saveRDS(seurat_obj_metadata_df, paste0(path_r_objects, "/post12_cd45neg_alldata_final_metadata.rds"))
+openxlsx::write.xlsx(seurat_obj_metadata_df,
+                     paste0(path_r_tables, "/post12_cd45neg_alldata_final_metadata.xlsx"))
+```
+
+```{r}
+# Save annotated Seurat object
+saveRDS(seurat_obj, paste0(path_r_objects, "/post12_cd45neg_alldata_final_clustering_annotation.rds"))
+#seurat_obj <- readRDS(paste0(path_r_objects, "/post12_cd45neg_alldata_final_clustering_annotation.rds"))
+```
+
+
+# Session Info
+```{r}
+sessionInfo()
+```

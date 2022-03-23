@@ -1,0 +1,268 @@
+---
+title: "GEX Quality control"
+author: "Laura Jiménez Gracia"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# Introduction
+As shown in the previous notebook, there are no major differences among all libraries processed and sequenced at CNAG in terms of sequencing depth, number of recovered cells, mean reads per cell, median genes per cell, among others. For this reason, we will merge all libraries together and we will perform a single quality control (QC) including all libraries. Therefore, unique QC thresholds will be determined and applied to all libraries.
+
+## Objective
+In this Rmarkdown document, we are going to perform a quality control (QC) in order to filter out low-quality cells and genes. To do so, we will follow the current best practices for scRNA-seq QC described in [Luecken al. Mol Syst Biol (2018)](https://doi.org/10.15252/msb.20188746).
+
+# Pre-processing
+## Libraries
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(Seurat)
+library(ggrepel)
+library(UpSetR)
+library(gt)
+library(grid)
+```
+
+## Parameters
+Here we will define and load objects and functions that will be used throughout the document.
+```{r}
+# Paths
+sub_folder <- "SCGTEST_32"
+path_project_metadata <- here::here("01_cellranger_mapping/data/FIXnCUT_metadata.csv")
+path_cellranger_data <- here::here(paste0("01_cellranger_mapping/subprojects/", sub_folder, "/jobs"))
+#path_scrublet_data <- here::here("02_QC/2_doublet_detection/results/tables")
+path_r_objects <- here::here("02_QC/results/R_objects")
+
+# Functions
+source(here::here("bin/utils.R"))
+```
+
+
+## Load data
+The data used in this Rmarkdown document comes from **SCGTEST_32** dataset, filtered matrices were processed with `cellranger v6.1.1`, and the doublet predictions were obtained using `scrublet`.
+```{r}
+# Load all metadata information
+metadata <- read.csv(path_project_metadata)
+
+# Merging metadata_all tables
+metadata <- metadata %>% 
+  filter(subproject == "SCGTEST_32" & type == "cDNA")
+
+print("Libraries metadata")
+DT::datatable(metadata, options = list(scrollX = TRUE))
+```
+
+
+```{r}
+# Getting list of gem_ids
+gemid_list <- sort(unique(metadata$gem_id))
+
+# Create Seurat object
+## Counts data
+seurat_obj_list <- purrr::map(gemid_list, function(gem_id) {
+  filtered_matrix_path <- paste(path_cellranger_data, gem_id, gem_id, 
+                                    "outs/per_sample_outs", gem_id, "count/sample_feature_bc_matrix", sep = "/")
+  expression_matrix <- Read10X(data.dir = filtered_matrix_path)
+  seurat = CreateSeuratObject(counts = expression_matrix, project = gem_id)
+  # Add gem_id to each barcode (cell)
+  seurat$gem_id <- as.factor(gem_id)
+  seurat
+})
+names(seurat_obj_list) <- gemid_list
+```
+
+
+## Merge seurat objects
+```{r}
+# Merge Seurat objects
+seurat_obj <- merge(x = seurat_obj_list[[1]],
+                    y = seurat_obj_list[2:length(seurat_obj_list)],
+                    add.cell.ids = gemid_list)
+
+# Remove Seurat object list
+rm(seurat_obj_list)
+```
+
+## Add library metadata
+Now, we will add metadata_all information of the different samples.
+```{r}
+# Create dataframe with seurat metadata_all (by barcodes) and sample metadata_all
+seurat_obj_metadata <- left_join(seurat_obj@meta.data, metadata, by = "gem_id")
+
+# Add only relevant metadata_all variables & convert into factors
+seurat_obj$library_name <- as.factor(seurat_obj_metadata$library_name)
+seurat_obj$donor_id <- as.factor(seurat_obj_metadata$organism)
+seurat_obj$tissue <- as.factor(seurat_obj_metadata$tissue)
+seurat_obj$disease <- as.factor(seurat_obj_metadata$disease)
+seurat_obj$sample_protocol <- as.factor(seurat_obj_metadata$sample_protocol)
+seurat_obj$fixation_time <- as.factor(seurat_obj_metadata$fixation_time)
+```
+
+## Save merged data
+```{r}
+# Save Merged Seurat object
+saveRDS(seurat_obj, str_c(path_r_objects, "/scgtest32_merged.rds"))
+#seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest32_merged.rds"))
+```
+
+
+# Exclusive genes
+```{r}
+seurat_obj_list <- SplitObject(seurat_obj, split.by = "library_name")
+```
+
+```{r}
+seurat_obj_list <- purrr::map(seurat_obj_list, function(seurat) {
+  # Number of cells expressing each gene, excluding 0 counts
+  n_cells <- Matrix::rowSums(seurat[["RNA"]]@counts > 0)
+  
+  # Subset genes that are expressed in data
+  keep_genes <- rownames(seurat)[n_cells > 0]
+
+  # Filtering out genes expressed in few cells
+  seurat_obj <- subset(seurat, features = keep_genes)
+  seurat_obj  
+})
+seurat_obj_list
+```
+
+
+## Upset Plot
+https://github.com/hms-dbmi/UpSetR
+
+```{r fig.height=5, fig.width=8}
+UpSetR::upset(
+  UpSetR::fromList(list(
+    "Colon_fixed_24h" = rownames(seurat_obj_list$Colon_fixed_24h),
+    "Colon_fresh" = rownames(seurat_obj_list$Colon_fresh),
+    "Lung_fixed_24h" = rownames(seurat_obj_list$Lung_fixed_24h),
+    "Lung_fresh" = rownames(seurat_obj_list$Lung_fresh)
+  )),
+  order.by = "freq",
+  #group.by = "sets",
+  mainbar.y.label = "# Genes", sets.x.label = "# Genes / sample",
+  point.size = 4, line.size = 1,
+  empty.intersections = "on",
+   queries = list(
+     list(query = intersects, params = list("Colon_fixed_24h", "Lung_fixed_24h"), color = "orange", active = T),
+     list(query = intersects, params = list("Colon_fresh", "Lung_fresh"), color = "blue", active = T),
+     list(query = intersects, params = list("Colon_fixed_24h"), color = "red", active = T),
+     list(query = intersects, params = list("Lung_fixed_24h"), color = "red", active = T),
+     list(query = intersects, params = list("Colon_fresh"), color = "green", active = T),
+     list(query = intersects, params = list("Lung_fresh"), color = "green", active = T)
+     )
+  )
+```
+
+## Identifyng genes & GSEA
+```{r}
+fromList_togetdata <- function (input) {
+  # Same as original fromList()...
+  elements <- unique(unlist(input))
+  data <- unlist(lapply(input, function(x) {
+      x <- as.vector(match(elements, x))
+      }))
+  data[is.na(data)] <- as.integer(0)
+  data[data != 0] <- as.integer(1)
+  data <- data.frame(matrix(data, ncol = length(input), byrow = F))
+  data <- data[which(rowSums(data) != 0), ]
+  names(data) <- names(input)
+  # ... Except now it conserves your original value names!
+  row.names(data) <- elements
+  return(data)
+  }
+
+upset_data <- fromList_togetdata(list(
+    "Colon_fixed_24h" = rownames(seurat_obj_list$Colon_fixed_24h),
+    "Colon_fresh" = rownames(seurat_obj_list$Colon_fresh),
+    "Lung_fixed_24h" = rownames(seurat_obj_list$Lung_fixed_24h),
+    "Lung_fresh" = rownames(seurat_obj_list$Lung_fresh)
+  ))
+
+
+# TECHNOLOGY UNIQUE
+genes_fresh_unique <- upset_data %>% 
+  filter(Colon_fresh == 1 & Lung_fresh == 1 & Colon_fixed_24h == 0 & Lung_fixed_24h == 0)
+genes_fresh_unique <- rownames(genes_fresh_unique)
+genes_fresh_unique
+
+genes_fixncut_unique <- upset_data %>% 
+  filter(Colon_fresh == 0 & Lung_fresh == 0 & Colon_fixed_24h == 1 & Lung_fixed_24h == 1)
+genes_fixncut_unique <- rownames(genes_fixncut_unique)
+genes_fixncut_unique
+
+
+# TISSUE-TECH UNIQUE
+genes_lungfresh_unique <- upset_data %>% 
+  filter(Colon_fresh == 0 & Lung_fresh == 1 & Colon_fixed_24h == 0 & Lung_fixed_24h == 0)
+genes_lungfresh_unique <- rownames(genes_lungfresh_unique)
+genes_lungfresh_unique
+
+genes_lungfixncut_unique <- upset_data %>% 
+  filter(Colon_fresh == 0 & Lung_fresh == 0 & Colon_fixed_24h == 0 & Lung_fixed_24h == 1)
+genes_lungfixncut_unique <- rownames(genes_lungfixncut_unique)
+genes_lungfixncut_unique
+
+
+genes_colonfresh_unique <- upset_data %>% 
+  filter(Colon_fresh == 1 & Lung_fresh == 0 & Colon_fixed_24h == 0 & Lung_fixed_24h == 0)
+genes_colonfresh_unique <- rownames(genes_colonfresh_unique)
+genes_colonfresh_unique
+
+genes_colonfixncut_unique <- upset_data %>% 
+  filter(Colon_fresh == 0 & Lung_fresh == 0 & Colon_fixed_24h == 1 & Lung_fixed_24h == 0)
+genes_colonfixncut_unique <- rownames(genes_colonfixncut_unique)
+genes_colonfixncut_unique
+```
+
+```{r}
+library(enrichR)
+```
+
+
+```{r}
+# Define comparison paths
+#path_GO_results <- paste0(path_r_tables, "/scbatlle30_GOBP21_", comparison_name)
+database <- "GO_Biological_Process_2021" # GO_Biological_Process_2021, KEGG_2021_Human, Reactome_2016
+
+## EnrichR
+enrichR_results <- run_enrichR_forGO(
+  database = database,
+  DE_genes = genes_lungfixncut_unique,
+  adj_pval = 0.05,
+  number_enriched_genes = 2,
+  num_GO_size_min = 5,
+  num_GO_size_max = 300,
+  OR = 2
+)
+
+## Filter reliable results
+enrichR_results_filtered <- enrichR_results %>% 
+  dplyr::filter(is_reliable == TRUE)
+
+## Plot
+gg_enrichR_hallmark <- gg_enrichR_GO("", 
+             database,
+             enrichR_results_filtered, 
+             n_top = 20)
+print(gg_enrichR_hallmark)
+
+# Save results
+## Export list of DE genes
+#path_hallmark <- paste0(path_r_tables, "/stromal_hallmark.xlsx")
+#openxlsx::write.xlsx(myList, file = path_hallmark)  
+```
+
+
+# Session Info
+```{r}
+sessionInfo()
+```
