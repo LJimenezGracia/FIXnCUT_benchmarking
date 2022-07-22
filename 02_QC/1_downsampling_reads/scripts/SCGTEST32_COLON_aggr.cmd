@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
 #SBATCH --job-name="SCGTEST32_COLON"
-#SBATCH --workdir=.
+#SBATCH --workdir=/scratch/devel/ljimenez/projects/FIXnCUT/02_QC/1_downsampling_reads
 
-#SBATCH --error=./logs/slurm_%x_%J.err
-#SBATCH --output=./logs/slurm_%x_%J.out
+#SBATCH --error=logs/slurm_%x_%J.err
+#SBATCH --output=logs/slurm_%x_%J.out
 
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=6
@@ -19,6 +19,6 @@ ulimit -n 16000
 export HDF5_USE_FILE_LOCKING="FALSE"
 export TENX_IGNORE_DEPRECATED_OS=1 
 
-/scratch/groups/hheyn/software/cellranger/6.1.1/cellranger aggr --id=SCGTEST32_COLON --csv=/scratch/devel/ljimenez/projects/FIXnCUT/02_QC/1_downsampling_reads/data/SCGTEST32_COLON_aggr.csv --normalize=mapped --nosecondary
+/scratch/groups/singlecell/software/cellranger/6.1.1/cellranger aggr --id=SCGTEST32_COLON --csv=/scratch/devel/ljimenez/projects/FIXnCUT/02_QC/1_downsampling_reads/data/SCGTEST32_COLON_aggr.csv --normalize=mapped --nosecondary
 
 echo [`date "+%Y-%m-%d %T"`] job finished

@@ -54,30 +54,27 @@ names(color_palette) <- NULL
 ```
 
 ## Load data
-The data used in this Rmarkdown document comes from **SCGTEST_33** dataset.
+The data used in this Rmarkdown document comes from **OMNISCOPE_39** dataset.
 ```{r}
 # Load all metadata information
 metadata <- read.csv(path_project_metadata)
 
 # Merging metadata tables
 metadata <- metadata %>% 
-  filter(subproject == "SCGTEST_33" & tissue == "Lung")
+  filter(subproject == "OMNISCOPE_39" & tissue == "LUNG")
 
 print("Libraries/Samples metadata")
 DT::datatable(metadata, options = list(scrollX = TRUE))
 
 # Load Seurat object
-seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_cells1_clustering_annotation.rds"))
+seurat_obj <- readRDS(str_c(path_r_objects, "/omniscope39_m_LUNG_healthy_stress_cells1_clustering_annotation.rds"))
 seurat_obj
+DefaultAssay(seurat_obj) <- "RNA"
 ```
 
 ```{r}
-# Reorder factor
-seurat_obj$sample_protocol <- factor(x = seurat_obj$sample_protocol,
-                                    levels = c("Fresh", "Fix&Cut_24h", "Fix&Cut_7d", "Cryopreservation", "Fix&Cut+Cryopreservation"))
-
 # Remove doublets
-seurat_obj <- seurat_obj[, seurat_obj$celltypes_1 != "Dobulets APC-B cells"]
+seurat_obj <- seurat_obj[, seurat_obj$celltypes_1 != "Low quality cells"]
 ```
 
 ## Cell proportions
@@ -115,15 +112,15 @@ genes <- c("Actb", # housekeeping gene
 ```{r fig.width=25, fig.height=6}
 gg1 <- VlnPlot(
   seurat_obj,
-  features = c("Actb", "Ptprc", "Pecam1"),
+  features = c("Actb", "Epcam", "Pecam1"),
   group.by = "sample_protocol",
   cols = color_palette, 
   pt.size = 0, 
   ncol = 3) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
                  width=0.25, position = position_dodge(width = .25)) &
-      ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
-                                 label = "p.signif", label.y.npc = 0.95) & # p.format)
+      ggpubr::stat_compare_means( method = "wilcox.test",
+                                 label = "p.format", label.y.npc = 0.95) & # p.format)
   ylim(0, 7) &
   scale_fill_brewer(palette = "Set2")
 
@@ -136,15 +133,15 @@ gg2 <- VlnPlot(
   ncol = 2) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
                  width=0.25, position = position_dodge(width = .25)) & 
-        ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
-                                 label = "p.signif", label.y.npc = 0.95) & # p.format)
+        ggpubr::stat_compare_means( method = "wilcox.test",
+                                 label = "p.format", label.y.npc = 0.95) & # p.format)
   ylim(0, 7) &
   scale_fill_brewer(palette = "Set2")
 
 cowplot::plot_grid(plotlist = list(gg1, gg2), ncol = 2, rel_widths = c(1.5, 1))
 ```
 
-```{r fig.width=25, fig.height=20}
+```{r fig.width=10, fig.height=20}
 FeaturePlot(seurat_obj,
             features = genes,
             split.by = "sample_protocol",
@@ -167,15 +164,29 @@ VlnPlot(seurat_obj,
         ncol = 4)  &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
                  width=0.25, position = position_dodge(width = .25)) &
-      ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
+      ggpubr::stat_compare_means( method = "wilcox.test",
                                  label = "p.signif", label.y.npc = 0.95) & # p.format)
   ylim(0, 9) &
   scale_fill_brewer(palette = "Set2")
 ```
 
-```{r fig.width=25, fig.height=12}
+```{r fig.width=20, fig.height=6}
+VlnPlot(seurat_obj,
+        features = lowquality_genes,
+        group.by = "celltypes_1",
+        split.by = "sample_protocol", 
+        ncol = 4)  &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
+                 width=0.25, position = position_dodge(width = .25)) &
+      ggpubr::stat_compare_means( method = "wilcox.test",
+                                 label = "p.signif", label.y.npc = 0.95) & # p.format)
+  ylim(0, 9) &
+  scale_fill_brewer(palette = "Set2")
+```
+
+```{r fig.width=10, fig.height=12}
 FeaturePlot(seurat_obj,
-            features = c("Hbb-bs", "Hba-a1", "Hba-a2"),
+            features = c("Hbb-bs", "Hba-a1", "Hba-a2", "Hbb-bt"),
             split.by = "sample_protocol",
             pt.size = 0.25,
             order = T,
@@ -183,34 +194,6 @@ FeaturePlot(seurat_obj,
   scale_colour_gradientn(colours = viridis::inferno(10))
 ```
 
-
-```{r fig.width=20, fig.height=5}
-VlnPlot(seurat_obj,
-        features = lowquality_genes,
-        group.by = "sample_protocol",
-        idents = "Pheumocytes Type I",
-        pt.size = 0.1, 
-        ncol = 4) &
-  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
-                 width=0.25, position = position_dodge(width = .25)) &
-      ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
-                                 label = "p.signif", label.y.npc = 0.95) & # p.format)
-  ylim(0, 8.5) &
-  scale_fill_brewer(palette = "Set2")
-
-VlnPlot(seurat_obj,
-        features = lowquality_genes,
-        group.by = "sample_protocol",
-        idents = "Pneumocytes Type II",
-        pt.size = 0.1, 
-        ncol = 4) &
-  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
-                 width=0.25, position = position_dodge(width = .25)) &
-      ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
-                                 label = "p.signif", label.y.npc = 0.95) & # p.format)
-  ylim(0, 8.5) &
-  scale_fill_brewer(palette = "Set2")
-```
 
 # Massoni et al. gene signatures
 ```{r}
@@ -224,29 +207,14 @@ VlnPlot(
   features = c("Actb", TOP_UPgenes),
   group.by = "sample_protocol",
   cols = color_palette, 
-  pt.size = 0, 
+  pt.size = 0.1, 
   ncol = 5) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
-                 width=0.25, position = position_dodge(width = .25)) & # p.format)  
+                 width=0.25, position = position_dodge(width = .25)) &
+        ggpubr::stat_compare_means(method = "wilcox.test",
+                                 label = "p.format", label.y.npc = 0.95, size=5) &
   scale_fill_brewer(palette = "Set2")
 ```
-
-```{r fig.width=40, fig.height=30}
-# Removing doublets
-seurat_obj <- subset(seurat_obj, 
-                     celltypes_1 != "Dobulets APC-B cells")
-
-VlnPlot(
-  seurat_obj,
-  features = c("Actb", TOP_UPgenes),
-  group.by = "celltypes_1",
-  split.by = "sample_protocol",
-  #cols = color_palette, 
-  pt.size = 0, 
-  ncol = 4) &
-  scale_fill_brewer(palette = "Set2")
-```
-
 
 ```{r fig.width=17, fig.height=5}
 DotPlot(seurat_obj,
@@ -255,7 +223,6 @@ DotPlot(seurat_obj,
         dot.scale = 10,
         )
 ```
-
 
 
 ```{r fig.width=8, fig.height=5}
@@ -276,33 +243,15 @@ VlnPlot(
   features = "vandenBrink_signature1",
   group.by = "sample_protocol",
   cols = color_palette, 
-  pt.size = 0,
+  pt.size = 0.1,
   ncol = 1) &
-  ylim(0, 3) &
+  ylim(0, 1.5) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
                  width=0.25, position = position_dodge(width = .25)) &
-  ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
-                                 label = "p.format", label.y.npc = 0.95) &
+  ggpubr::stat_compare_means( method = "wilcox.test",
+                                 label = "p.format", label.y.npc = 0.95, size=5) &
   scale_fill_brewer(palette = "Set2")
 ```
-
-
-```{r fig.width=40, fig.height=30}
-# Removing doublets
-seurat_obj <- subset(seurat_obj, 
-                     celltypes_1 != "Dobulets APC-B cells")
-
-VlnPlot(
-  seurat_obj,
-  features = c("Actb", vandenBrink_signature),
-  group.by = "celltypes_1",
-  split.by = "sample_protocol",
-  #cols = color_palette, 
-  pt.size = 0, 
-  ncol = 4) &
-  scale_fill_brewer(palette = "Set2")
-```
-
 
 ```{r fig.width=8, fig.height=5}
 # Gene signature associated to storage time in PBMC (measured by microarrays)
@@ -322,13 +271,13 @@ VlnPlot(
   features = "Baechler_signature1",
   group.by = "sample_protocol",
   cols = color_palette, 
-  pt.size = 0,
+  pt.size = 0.1,
   ncol = 1) &
-  ylim(0, 1.5) &
+  ylim(0, 1) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
                  width=0.25, position = position_dodge(width = .25)) &
-  ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
-                                 label = "p.format", label.y.npc = 0.95) &
+  ggpubr::stat_compare_means( method = "wilcox.test",
+                                 label = "p.format", label.y.npc = 0.95, size=5) &
   scale_fill_brewer(palette = "Set2")
 ```
 
@@ -352,13 +301,13 @@ VlnPlot(
   features = "PBMC_Massoni_signature1",
   group.by = "sample_protocol",
   cols = color_palette, 
-  pt.size = 0,
+  pt.size = 0.1,
   ncol = 1) &
-  ylim(0, 1.25) &
+  ylim(0, 0.75) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
                  width=0.25, position = position_dodge(width = .25)) &
-  ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
-                                 label = "p.format", label.y.npc = 0.95) &
+  ggpubr::stat_compare_means( method = "wilcox.test",
+                                 label = "p.format", label.y.npc = 0.95, size=5) &
   scale_fill_brewer(palette = "Set2")
 ```
 
@@ -367,7 +316,7 @@ VlnPlot(
 housekeeping_signature <- c("Actb", "B2m",  "Gusb", "Hmbs", "Rpl13a", "Sdha")
 Bcell_signature <- c("Cd79a", "Cd79b", "Ms4a1", "Cd19", "Cd74", "Ly6d", "Ighm", "Igkc")
 Tcell_signature <- c("Cd3d", "Cd3e", "Cd4", "Cd8a", "Nkg7", "Irf7")
-Myeloid_signature <- c("S100a4", "Cd14", "Lyz2", "Ccr2", "Ly6c2", "Plac8")
+Myeloid_signature <- c("S100a4", "Cd14", "Lyz", "Ccr2", "Plac8")
 
 signature_list <- list(housekeeping_signature, Bcell_signature, Tcell_signature, Myeloid_signature)
 names(signature_list) <- c("housekeeping_signature", "Bcell_signature", "Tcell_signature", "Myeloid_signature")
@@ -391,7 +340,7 @@ VlnPlot(
   ylim(0, 2.5) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
                  width=0.25, position = position_dodge(width = .25)) &
-  ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
+  ggpubr::stat_compare_means( method = "wilcox.test",
                                  label = "p.format", label.y.npc = 0.95) &
   scale_fill_brewer(palette = "Set2")
 
@@ -403,10 +352,10 @@ VlnPlot(
   cols = color_palette, 
   pt.size = 0,
   ncol = 1) &
-  ylim(0, 5) &
+  ylim(0, 4) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
                  width=0.25, position = position_dodge(width = .25)) &
-  ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
+  ggpubr::stat_compare_means( method = "wilcox.test",
                                  label = "p.format", label.y.npc = 0.95) &
   scale_fill_brewer(palette = "Set2")
 
@@ -414,7 +363,23 @@ VlnPlot(
 VlnPlot(
   seurat_obj,
   features = "Tcell_signature3",
-  idents = c("T cells"),
+  idents = c("CD8+ T cells", "CM CD4+ T cells 1", "CM CD4+ T cells 2", "Cytotoxic CD8+ T cells", 
+             "Naive CD4+ T cells", "Naive CD8+ T cells"),
+  group.by = "sample_protocol",
+  cols = color_palette, 
+  pt.size = 0,
+  ncol = 1) &
+  ylim(0, 2) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
+                 width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means( method = "wilcox.test",
+                                 label = "p.format", label.y.npc = 0.95) &
+  scale_fill_brewer(palette = "Set2")
+
+VlnPlot(
+  seurat_obj,
+  features = "Myeloid_signature4",
+  idents = c("CD14+ Monocytes", "DC2", "DC4"),
   group.by = "sample_protocol",
   cols = color_palette, 
   pt.size = 0,
@@ -422,32 +387,14 @@ VlnPlot(
   ylim(0, 2.5) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
                  width=0.25, position = position_dodge(width = .25)) &
-  ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
-                                 label = "p.format", label.y.npc = 0.95) &
-  scale_fill_brewer(palette = "Set2")
-
-VlnPlot(
-  seurat_obj,
-  features = "Myeloid_signature4",
-  idents = "Monocytes/Macrophages/DCs",
-  group.by = "sample_protocol",
-  cols = color_palette, 
-  pt.size = 0,
-  ncol = 1) &
-  ylim(0, 4) &
-  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
-                 width=0.25, position = position_dodge(width = .25)) &
-  ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
+  ggpubr::stat_compare_means( method = "wilcox.test",
                                  label = "p.format", label.y.npc = 0.95) &
   scale_fill_brewer(palette = "Set2")
 ```
+
+
 ## RidgePlot
 ```{r fig.width=10, fig.height=6}
-seurat_obj$sample_protocol <- factor(
-  x = seurat_obj$sample_protocol,
-  levels=c("Fresh", "Fix&Cut_24h", "Cryopreservation", "Fix&Cut+Cryopreservation", "Fix&Cut_7d")
-  )
-
 RidgePlot(seurat_obj,
           features = "housekeeping_signature1",
   group.by = "sample_protocol")
@@ -459,12 +406,13 @@ RidgePlot(seurat_obj,
 
 RidgePlot(seurat_obj,
           features = "Tcell_signature3",
-  idents = c("T cells"),
+  idents = c("CD8+ T cells", "CM CD4+ T cells 1", "CM CD4+ T cells 2", "Cytotoxic CD8+ T cells", 
+             "Naive CD4+ T cells", "Naive CD8+ T cells"),
   group.by = "sample_protocol")
 
 RidgePlot(seurat_obj,
           features = "Myeloid_signature4",
-  idents = c("Monocytes/Macrophages/DCs"),
+  idents = c("CD14+ Monocytes", "DC2", "DC4"),
   group.by = "sample_protocol")
 ```
 

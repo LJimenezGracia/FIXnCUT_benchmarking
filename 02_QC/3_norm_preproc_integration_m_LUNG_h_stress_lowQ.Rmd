@@ -1,5 +1,5 @@
 ---
-title: "Data normalization and pre-processing: mouse_LUNG_healthy"
+title: "Data normalization and pre-processing: mouse_LUNG_healthy_stress"
 author: "Laura Jiménez Gracia"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -50,20 +50,20 @@ inferno_color_palette <- viridis::inferno(10)
 ```
 
 ## Load data
-The data used in this Rmarkdown document comes from **SCGTEST_33** dataset.
+The data used in this Rmarkdown document comes from **OMNISCOPE_39** dataset.
 ```{r}
 # Load all metadata information
 metadata <- read.csv(path_project_metadata)
 
 # Merging metadata tables
 metadata <- metadata %>% 
-  filter(subproject == "SCGTEST_33" & tissue == "Lung")
+  filter(subproject == "OMNISCOPE_39" & tissue == "Lung")
 
 print("Libraries/Samples metadata")
 DT::datatable(metadata, options = list(scrollX = TRUE))
 
 # Load Seurat object
-seurat_obj <- readRDS(paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_filtered.rds"))
+seurat_obj <- readRDS(paste0(path_r_objects, "/omniscope39_m_LUNG_healthy_stress_filtered_lowQ.rds"))
 seurat_obj
 ```
 
@@ -216,7 +216,7 @@ At this point, we will determine how many PCs should be considered for data visu
 ElbowPlot(seurat_obj, ndims = 50, reduction = "pca")
 ```
 
-In this particular dataset, we will use the first 30 PCs to visualize data and perform the clustering.
+In this particular dataset, we will use the first 20 PCs to visualize data and perform the clustering.
 
 # Data visualization
 For visualization purposes, it is standard practice to use the Uniform Approximation and Projection method (UMAP), which is a non-linear dimensionality reduction method that reduce the data dimensionality into a 2-dimension space.
@@ -224,7 +224,7 @@ For visualization purposes, it is standard practice to use the Uniform Approxima
 ```{r}
 # Run UMAP
 seurat_obj <- seurat_obj %>% 
-  RunUMAP(reduction = "pca", dims = 1:30)
+  RunUMAP(reduction = "pca", dims = 1:20)
 ```
 
 ## Assessing confounder variables
@@ -342,8 +342,8 @@ FeaturePlot(seurat_obj,
 # Save processed Seurat objects
 ```{r}
 # Save processed lognorm Seurat object
-saveRDS(seurat_obj, paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_lognorm_processed.rds"))
-#seurat_obj <- readRDS(paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_lognorm_processed.rds"))
+saveRDS(seurat_obj, paste0(path_r_objects, "/omniscope39_m_LUNG_healthy_stress_lognorm_processed.rds"))
+#seurat_obj <- readRDS(paste0(path_r_objects, "/omniscope39_m_LUNG_healthy_stress_lognorm_processed.rds"))
 ```
 
 
@@ -358,7 +358,7 @@ ElbowPlot(seurat_obj_integrated, ndims = 50, reduction = "harmony")
 
 # Dimensionality reduction
 seurat_obj_integrated <- seurat_obj_integrated %>%
-  RunUMAP(reduction = "harmony", dims = 1:30)
+  RunUMAP(reduction = "harmony", dims = 1:20)
 ```
 
 ## Assessing confounder variables
@@ -439,8 +439,7 @@ FeaturePlot(seurat_obj_integrated,
                          "H2-Aa" # MHC- antigen presenting
                          ),
             order = T,
-            ncol = 6) &
-  scale_colour_gradientn(colours = inferno_color_palette)
+            ncol = 6)
 ```
 
 
@@ -464,26 +463,24 @@ FeaturePlot(seurat_obj_integrated,
                         "Wt1" # mesothelium
                          ),
             order = T,
-            ncol = 6) &
-  scale_colour_gradientn(colours = inferno_color_palette)
+            ncol = 6)
 ```
 
 # Save processed Seurat objects
 ```{r}
 # Save processed lognorm Seurat object
-saveRDS(seurat_obj_integrated, paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_lognorm_harmony_processed.rds"))
-#seurat_obj_integrated <- readRDS(paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_lognorm_harmony_processed.rds"))
+saveRDS(seurat_obj_integrated, paste0(path_r_objects, "/omniscope39_m_LUNG_healthy_stress_lognorm_harmony_processed_lowQ.rds"))
+#seurat_obj_integrated <- readRDS(paste0(path_r_objects, "/omniscope39_m_LUNG_healthy_stress_lognorm_harmony_processed_lowQ.rds"))
 ```
 
 
-```{r fig.width=20, fig.height=10}
+```{r fig.width=10, fig.height=15}
 # Low quality genes (Hbb, Hba)
 FeaturePlot(seurat_obj_integrated,
             features = c("Hbb-bs", "Hba-a1", "Hba-a2", "Hbb-bt"),
             split.by = "sample_protocol",
             order = T,
-            ncol = 3) &
-  scale_colour_gradientn(colours = inferno_color_palette)
+            ncol = 3)
 ```
 
 

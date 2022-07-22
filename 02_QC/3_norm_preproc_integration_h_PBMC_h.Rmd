@@ -1,5 +1,5 @@
 ---
-title: "Data normalization and pre-processing: mouse_LUNG_healthy"
+title: "Data normalization and pre-processing: human_PBMC_healthy"
 author: "Laura Jiménez Gracia"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -50,20 +50,20 @@ inferno_color_palette <- viridis::inferno(10)
 ```
 
 ## Load data
-The data used in this Rmarkdown document comes from **SCGTEST_33** dataset.
+The data used in this Rmarkdown document comes from **SCGTEST_34** dataset.
 ```{r}
 # Load all metadata information
 metadata <- read.csv(path_project_metadata)
 
 # Merging metadata tables
 metadata <- metadata %>% 
-  filter(subproject == "SCGTEST_33" & tissue == "Lung")
+  filter(subproject == "SCGTEST_34" & tissue == "PBMC")
 
 print("Libraries/Samples metadata")
 DT::datatable(metadata, options = list(scrollX = TRUE))
 
 # Load Seurat object
-seurat_obj <- readRDS(paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_filtered.rds"))
+seurat_obj <- readRDS(paste0(path_r_objects, "/scgtest34_h_PBMC_healthy_filtered.rds"))
 seurat_obj
 ```
 
@@ -101,17 +101,14 @@ seurat_obj[["RNA"]]@data[1:10, 1:20]
 ```
 
 ## Computing cell cycle score
-To assess cell cycle effects in the next steps, it is important to compute the cell cycle score once the data is normalized. To do so, we will assign each cell a score based on its expression of G2/M and S phase markers. The .RData file containing mouse cell cycle marker genes has been generated with `generate_cellcycle_markergenes_mouse.Rmd` script. This value will be stored in the Seurat metadata, and we will analyze it after the dimensionality reduction step is performed.
+To assess cell cycle effects in the next steps, it is important to compute the cell cycle score once the data is normalized. To do so, we will assign each cell a score based on its expression of G2/M and S phase markers. This value will be stored in the Seurat metadata, and we will analyze it after the dimensionality reduction step is performed.
 
 ```{r}
-# Load mouse cell_cycle marker genes
-load("/mnt/cnagclus/projects/reference_data/cellcycle_markergenes_mouse.Rdata")
-
 # Testing for cell_cycle effects
 seurat_obj <- CellCycleScoring(
   seurat_obj,
-  s.features = mouse_cellcycle_genes$mouse_s_genes,
-  g2m.features = mouse_cellcycle_genes$mouse_g2m_genes)
+  s.features = cc.genes$s.genes,
+  g2m.features = cc.genes$g2m.genes)
 ```
 
 
@@ -175,10 +172,9 @@ gg_pca_by_sample <- DimPlot(
 gg_pca_by_library + gg_pca_by_sample
 ```
 
-
-
 ```{r}
 # Get % variance of PC
+
 mat <- Seurat::GetAssayData(seurat_obj, assay = "RNA", slot = "scale.data")
 pca <- seurat_obj[["pca"]]
 
@@ -195,7 +191,6 @@ plot(x = seq(1:50),
      y = varExplained)
 ```
 
-
 ```{r fig.width=12, fig.height=5}
 # Visualize the PCA reduction, grouping by cell cycle phase
 gg_pca_by_cellcycle <- DimPlot(
@@ -207,6 +202,7 @@ gg_pca_by_cellcycle <- DimPlot(
 
 gg_pca_by_cellcycle
 ```
+
 Based on the previous plots, we do not observe significant batch-effects neither cell cycle phase effects. Thus, we would not regress out the variation due to cell cycle because there is no effect.
 
 At this point, we will determine how many PCs should be considered for data visualization in 2 dimensions and for the downstream cluster analysis. It important to ensure that we are capturing the majority of the variation (or cell types) present in our dataset.
@@ -216,7 +212,8 @@ At this point, we will determine how many PCs should be considered for data visu
 ElbowPlot(seurat_obj, ndims = 50, reduction = "pca")
 ```
 
-In this particular dataset, we will use the first 30 PCs to visualize data and perform the clustering.
+In this particular dataset, we will use the first 20 PCs to visualize data and perform the clustering.
+
 
 # Data visualization
 For visualization purposes, it is standard practice to use the Uniform Approximation and Projection method (UMAP), which is a non-linear dimensionality reduction method that reduce the data dimensionality into a 2-dimension space.
@@ -224,7 +221,7 @@ For visualization purposes, it is standard practice to use the Uniform Approxima
 ```{r}
 # Run UMAP
 seurat_obj <- seurat_obj %>% 
-  RunUMAP(reduction = "pca", dims = 1:30)
+  RunUMAP(reduction = "pca", dims = 1:20)
 ```
 
 ## Assessing confounder variables
@@ -282,7 +279,7 @@ gg_qc_umap
 
 ## Assessing multiple confounder variables
 
-```{r fig.width=20, fig.height=5}
+```{r fig.width=15, fig.height=5}
 # Multiple metadata variables
 DimPlot(
   seurat_obj,
@@ -300,18 +297,18 @@ DimPlot(
 ```{r fig.width=30, fig.height=15}
 # Immune fraction
 FeaturePlot(seurat_obj,
-            features = c("Ptprc", # CD45+, immune cells
-                         "Cd3d", # T cells
-                         "Cd4", "Foxp3", # CD4+ T cells, Treg
-                         "Cd8b1", "Nkg7", # CD8+ T cells, cytotoxic
-                         "Klrb1c", # NK cells
-                         "Cd19", "Cd79a", # B cells
-                         "Ms4a1", "Jchain", # Naive vs Plasma cells
-                         "Lyz", "Cd14", "Plac8", "Cd68", # Mono/macro
-                         "Itgax", "Mertk", "Siglecf", "Marco", # Alveolar macrophages
-                         "S100a8", "S100a9", # Neutrophils
-                         "Cd200r3", # Mast cells
-                         "H2-Aa" # MHC- antigen presenting
+            features = c("PTPRC", # CD45+, immune cells
+                         "CD3D", # T cells
+                         "CD4", "FOXP3", "SELL", "IRF7", "KLRG1", # CD4+ T cells, Treg
+                         "CD8A", "NKG7", # CD8+ T cells, cytotoxic
+                         "KLRD1", "IL7R", # NK cells
+                         "CD79A", # B cells
+                         "MS4A1", "JCHAIN", # Naive vs Plasma cells
+                         "LYZ", "CD14", "FCGR3A", "PLAC8", # Mono/macro
+                         "CLEC9A", "CLEC10A", "FTL", "GZMB", # DCs
+                         "S100A9", # Neutrophils
+                         "CD200R3", # Mast cells
+                         "HLA-DRA" # MHC- antigen presenting
                          ),
             order = T,
             ncol = 6) &
@@ -319,31 +316,11 @@ FeaturePlot(seurat_obj,
 ```
 
 
-```{r fig.width=20, fig.height=10}
-# Non-immune fraction
-FeaturePlot(seurat_obj,
-            features = c("Epcam", # Epithelial cells
-                        "Pecam1", "Lyve1", # Endothelial cells
-                         "Col1a1", # Stromal cells
-                         "Krt5", # Basal cells
-                         "Scgb1a1", # Club cells /  Clara cells, non ciliated epithelial / secretory bronchiolar cells
-                         "Ager", "Sftpb", "Sftpc", "Lyz2", # Pneumocytes Type II
-                         "Tuba1a", # Ciliated cells
-                         "Cd24a", "Foxj1", # Ciliated columnar tracheobronchial cells
-                        "Muc5ac" # Goblet cells, columnar epithelial cells
-                         ),
-            order = T,
-            ncol = 4) &
-  scale_colour_gradientn(colours = inferno_color_palette)
-```
-
-
-
 # Save processed Seurat objects
 ```{r}
 # Save processed lognorm Seurat object
-saveRDS(seurat_obj, paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_lognorm_processed.rds"))
-#seurat_obj <- readRDS(paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_lognorm_processed.rds"))
+saveRDS(seurat_obj, paste0(path_r_objects, "/scgtest34_h_PBMC_healthy_lognorm_processed.rds"))
+#seurat_obj <- readRDS(paste0(path_r_objects, "/scgtest34_h_PBMC_healthy_lognorm_processed.rds"))
 ```
 
 
@@ -358,7 +335,7 @@ ElbowPlot(seurat_obj_integrated, ndims = 50, reduction = "harmony")
 
 # Dimensionality reduction
 seurat_obj_integrated <- seurat_obj_integrated %>%
-  RunUMAP(reduction = "harmony", dims = 1:30)
+  RunUMAP(reduction = "harmony", dims = 1:20)
 ```
 
 ## Assessing confounder variables
@@ -405,7 +382,7 @@ gg_umap_harmony_qc
 
 
 ## Assessing multiple confounder variables
-```{r fig.width=20, fig.height=5}
+```{r fig.width=15, fig.height=5}
 # Multiple metadata variables
 DimPlot(
   seurat_obj_integrated,
@@ -421,47 +398,20 @@ DimPlot(
 
 ## Assessing gene markers expression
 ```{r fig.width=30, fig.height=15}
-inferno_color_palette <- viridis::inferno(10)
-
 # Immune fraction
 FeaturePlot(seurat_obj_integrated,
-            features = c("Ptprc", # CD45+, immune cells
-                         "Cd3d", # T cells
-                         "Cd4", "Foxp3", # CD4+ T cells, Treg
-                         "Cd8b1", "Nkg7", # CD8+ T cells, cytotoxic
-                         "Klrb1c", # NK cells
-                         "Cd19", "Cd79a", # B cells
-                         "Ms4a1", "Jchain", # Naive vs Plasma cells
-                         "Lyz", "Cd14", "Plac8", "Cd68", # Mono/macro
-                         "Itgax", "Mertk", "Siglecf", "Marco", # Alveolar macrophages
-                         "S100a8", "S100a9", # Neutrophils
-                         "Cd200r3", # Mast cells
-                         "H2-Aa" # MHC- antigen presenting
-                         ),
-            order = T,
-            ncol = 6) &
-  scale_colour_gradientn(colours = inferno_color_palette)
-```
-
-
-```{r fig.width=35, fig.height=20}
-# Non-immune fraction
-FeaturePlot(seurat_obj_integrated,
-            features = c("Epcam", # Epithelial cells
-                        "Pecam1", "Lyve1", # Endothelial cells
-                        "Car4", # Pulmonary Endothelial cells 
-                        "Vegfc", "Prox1", # Venous / Lymphatic Endothelial cells 
-                         "Col1a1", # Stromal cells
-                         "Krt5", # Basal cells
-                        "Hopx", "Rtkn2", "Ager", "Cav1", "Emp2", # Pneumocytes Type I
-                         "Sftpb", "Sftpc", "Sftpd", "Lamp3", "Napsa", "Sftpa1", # Pneumocytes Type II
-                         "Tuba1a", # Ciliated cells
-                        "Scgb1a1", "Bpifb1", "Muc15", "Scgb3a1",  # Club cells /  Clara cells
-                        "Cd24a", "Foxj1", # Ciliated columnar tracheobronchial cells or Ciliated epithelium
-                        "Muc5ac",  # Goblet cells, columnar epithelial cells
-                        "Pdgfrb", # Axin2+ myofibroblast progenitors (AMPs)
-                        "Acta2", "Actg2", "Cnn1", #Smooth muscle,
-                        "Wt1" # mesothelium
+            features = c("PTPRC", # CD45+, immune cells
+                         "CD3D", # T cells
+                         "CD4", "FOXP3", "SELL", "IRF7", "KLRG1", # CD4+ T cells, Treg
+                         "CD8A", "NKG7", # CD8+ T cells, cytotoxic
+                         "KLRD1", "IL7R", # NK cells
+                         "CD79A", # B cells
+                         "MS4A1", "JCHAIN", # Naive vs Plasma cells
+                         "LYZ", "CD14", "FCGR3A", "PLAC8", # Mono/macro
+                         "CLEC9A", "CLEC10A", "FTL", "GZMB", # DCs
+                         "S100A9", # Neutrophils
+                         "CD200R3", # Mast cells
+                         "HLA-DRA" # MHC- antigen presenting
                          ),
             order = T,
             ncol = 6) &
@@ -471,18 +421,18 @@ FeaturePlot(seurat_obj_integrated,
 # Save processed Seurat objects
 ```{r}
 # Save processed lognorm Seurat object
-saveRDS(seurat_obj_integrated, paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_lognorm_harmony_processed.rds"))
-#seurat_obj_integrated <- readRDS(paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_lognorm_harmony_processed.rds"))
+saveRDS(seurat_obj_integrated, paste0(path_r_objects, "/scgtest34_h_PBMC_healthy_lognorm_harmony_processed.rds"))
+#seurat_obj_integrated <- readRDS(paste0(path_r_objects, "/scgtest34_h_PBMC_healthy_lognorm_harmony_processed.rds"))
 ```
 
 
-```{r fig.width=20, fig.height=10}
+```{r fig.width=10, fig.height=10}
 # Low quality genes (Hbb, Hba)
 FeaturePlot(seurat_obj_integrated,
-            features = c("Hbb-bs", "Hba-a1", "Hba-a2", "Hbb-bt"),
+            features = c("HBB", "HBA1", "HBA2"),
             split.by = "sample_protocol",
             order = T,
-            ncol = 3) &
+            ncol = 2) &
   scale_colour_gradientn(colours = inferno_color_palette)
 ```
 
@@ -490,8 +440,8 @@ FeaturePlot(seurat_obj_integrated,
 ```{r fig.width=20, fig.height=5}
 VlnPlot(seurat_obj_integrated,
         group.by = "sample_protocol",
-            features = c("Hbb-bs", "Hba-a1", "Hba-a2", "Hbb-bt"),
-        ncol = 4)
+        features = c("HBB", "HBA1", "HBA2"),
+        ncol = 3)
 ```
 
 

@@ -1,5 +1,5 @@
 ---
-title: "GEX Quality control: mouse_LUNG_healthy"
+title: "GEX Quality control: human_PBMC_healthy"
 author: "Laura Jiménez Gracia"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -35,7 +35,7 @@ Here we will define and load objects and functions that will be used throughout 
 ```{r}
 # Paths
 path_project_metadata <- here::here("01_cellranger_mapping/data/FIXnCUT_metadata.csv")
-path_cellranger_data <- here::here(paste0("02_QC/1_downsampling_reads"))
+path_cellranger_data <- here::here(paste0("01_cellranger_mapping/subprojects/SCGTEST_34/jobs"))
 #path_scrublet_data <- here::here("02_QC/2_doublet_detection/results/tables")
 path_r_objects <- here::here("02_QC/results/R_objects")
 
@@ -44,10 +44,10 @@ source(here::here("bin/utils.R"))
 
 # Thresholds
 min_libsize <- 300
-max_libsize <- 50000
+max_libsize <- 25000
 
-min_ngenes <- 150
-max_ngenes <- 7500
+min_ngenes <- 250
+max_ngenes <- 5000
 
 max_pctmt <- 25
 
@@ -56,16 +56,16 @@ min_cells <- 8
 
 
 ## Load data
-The data used in this Rmarkdown document comes from **SCGTEST_33** dataset, filtered matrices were processed with `cellranger v6.1.1`, and the doublet predictions were obtained using `scrublet`.
+The data used in this Rmarkdown document comes from **SCGTEST_34** dataset, filtered matrices were processed with `cellranger v6.1.1`, and the doublet predictions were obtained using `scrublet`.
 ```{r}
 # Load all metadata information
 metadata <- read.csv(path_project_metadata)
 
-subproject_folder <- "SCGTEST_33"
-subproject_folder_n <- "SCGTEST33"
-tissue <- "LUNG"
-
 # Merging metadata_all tables
+subproject_folder <- "SCGTEST_34"
+subproject_folder_n <- "SCGTEST34"
+tissue <- "PBMC"
+
 metadata <- metadata %>% 
   filter(subproject == subproject_folder & tissue == tissue)
 
@@ -75,45 +75,30 @@ DT::datatable(metadata, options = list(scrollX = TRUE))
 
 
 ```{r}
-# Metadata
-aggr_csv_path <- paste0(path_cellranger_data, "/data/", subproject_folder_n, "_", tissue, "_aggr.csv")
-metadata_aggr <- read.csv(aggr_csv_path)
-
-for (index in rownames(metadata_aggr)) {
-  print(index)
-  lib_name <- metadata_aggr[index, ]$library_name
-  metadata_aggr[index, ]$gem_id <- metadata$gem_id[metadata$library_name == lib_name]
-}
+# Getting list of gem_ids
+gemid_list <- sort(unique(metadata$gem_id))
 
 # Create Seurat object
 ## Counts data
-filtered_matrix_path <- paste0(path_cellranger_data, "/", subproject_folder_n, "_", tissue, "/outs/count/filtered_feature_bc_matrix")
-expression_matrix <- Read10X(data.dir = filtered_matrix_path)
-seurat_obj <- CreateSeuratObject(counts = expression_matrix, project = tissue)
+seurat_obj_list <- purrr::map(gemid_list, function(gem_id) {
+  filtered_matrix_path <- paste(path_cellranger_data, gem_id, gem_id, 
+                                    "outs/per_sample_outs", gem_id, "count/sample_feature_bc_matrix", sep = "/")
+  expression_matrix <- Read10X(data.dir = filtered_matrix_path)
+  seurat = CreateSeuratObject(counts = expression_matrix, project = gem_id)
+  # Add gem_id to each barcode (cell)
+  seurat$gem_id <- as.factor(gem_id)
+  seurat
+})
+names(seurat_obj_list) <- gemid_list
 
-# Rename cellnames / columns
-gem_id_list <- purrr::map(colnames(seurat_obj), function(colname){
-  x <- str_split(colname, "-")[[1]]
-  gem_id <- metadata_aggr[x[2], ]$sample_id
-  gem_id
-  })
-gem_id_list <- unlist(gem_id_list)
-seurat_obj <- RenameCells(seurat_obj, add.cell.id = gem_id_list)
-head(colnames(seurat_obj))
+# Merge Seurat objects
+seurat_obj <- merge(x = seurat_obj_list[[1]],
+                    y = seurat_obj_list[2:length(seurat_obj_list)],
+                    add.cell.ids = gemid_list)
 
-# Add orig.init and gem_id metadata
-seurat_obj$orig.ident <- gem_id_list
-seurat_obj$gem_id <- gem_id_list
+# Remove Seurat object list
+rm(seurat_obj_list)
 ```
-
-
-```{r}
-seurat_obj <- RenameCells(seurat_obj,
-                          new.names = str_replace(colnames(seurat_obj), pattern = regex("-[0-9]"), replacement = "-1"))
-head(colnames(seurat_obj))
-tail(colnames(seurat_obj))
-```
-
 
 ## Add library metadata
 Now, we will add metadata_all information of the different samples.
@@ -129,13 +114,12 @@ seurat_obj$disease <- as.factor(seurat_obj_metadata$disease)
 seurat_obj$sample_protocol <- as.factor(seurat_obj_metadata$sample_protocol)
 ```
 
-
 ## Add scrublet prediction
 ```{r}
 seurat_obj_list <- SplitObject(seurat_obj, split.by = "gem_id")
 
 # Add doublet predictions
-gem_ids <- unique(gem_id_list)
+gem_ids <- unique(gemid_list)
 scrublet_files_list <- purrr::map(unique(gem_ids), function(gem_id) {
   path_scrublet <- here::here(paste0(
   "02_QC/0_doublet_detection/results/", subproject_folder, "__", gem_id, "_doublet_prediction_scrublet.csv"))
@@ -167,6 +151,7 @@ seurat_obj_list <- purrr::map2(seurat_obj_list,
 seurat_obj_list
 ```
 
+
 ## Merge Seurat list
 ```{r}
 seurat_obj <- merge(seurat_obj_list[[1]], 
@@ -175,7 +160,6 @@ seurat_obj <- merge(seurat_obj_list[[1]],
 # Remove Seurat object list
 rm(seurat_obj_list)
 ```
-
 
 
 # GEX quality control
@@ -212,7 +196,7 @@ gg_libcomplex <- seurat_obj@meta.data %>%
 # Calculate percentage mitocondrial genes
 seurat_obj$pct_mt <- PercentageFeatureSet(
   seurat_obj,
-  pattern = "^mt-"
+  pattern = "^MT-"
 )
 
 # Plot MT expression
@@ -231,7 +215,7 @@ gg_mt <- seurat_obj@meta.data %>%
 # Calculate percentage ribosomal genes
 seurat_obj$pct_rb <- PercentageFeatureSet(
   seurat_obj,
-  pattern = "^Rp[sl]")
+  pattern = "^RP[SL]")
 
 # Plot RB expression
 gg_rb <- seurat_obj@meta.data %>%
@@ -248,13 +232,6 @@ gg_rb <- seurat_obj@meta.data %>%
 
 
 cowplot::plot_grid(gg_libsize, gg_libcomplex, gg_mt, gg_rb, ncol = 2)
-```
-
-## Save merged data
-```{r}
-# Save Merged Seurat object
-saveRDS(seurat_obj, str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_merged.rds"))
-#seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_merged.rds"))
 ```
 
 
@@ -621,14 +598,6 @@ table(n_cells > min_cells)
 seurat_obj <- subset(seurat_obj, features = keep_genes)
 seurat_obj
 ```
-
-# Save filtered data
-```{r}
-# Save Merged Seurat object
-saveRDS(seurat_obj, str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_filtered.rds"))
-#seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_filtered.rds"))
-```
-
 
 # Session Info
 ```{r}

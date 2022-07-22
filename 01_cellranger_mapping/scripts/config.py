@@ -20,12 +20,12 @@ feat_ref_path = None
 fastq_path = "/scratch/project/production/fastq"
 
 # Path to cellranger
-cellranger_path = "/scratch/groups/hheyn/software/cellranger/6.1.1/cellranger"
-slurmtemplate_path = "/scratch/groups/hheyn/software/cellranger/6.1.1/external/martian/jobmanagers/slurm.template"
+cellranger_path = "/scratch/groups/singlecell/software/cellranger/6.1.1/cellranger"
+slurmtemplate_path = "/scratch/groups/singlecell/software/cellranger/6.1.1/external/martian/jobmanagers/slurm.template"
 
 # Path to reference genomes
-Mmus_path = "/scratch/groups/hheyn/data/reference/refdata-gex-mm10-2020-A"
-Mmus_vdj_path = "/scratch/groups/hheyn/data/reference/refdata-cellranger-vdj-GRCm38-alts-ensembl-5.0.0"
+Mmus_path = "/scratch/groups/singlecell/data/reference/refdata-gex-mm10-2020-A"
+Mmus_vdj_path = "/scratch/groups/singlecell/data/reference/refdata-cellranger-vdj-GRCm38-alts-ensembl-5.0.0"
 
-Hsapiens_path = "/scratch/groups/hheyn/data/reference/refdata-gex-GRCh38-2020-A"
-Hsapiens_vdj_path = "/scratch/groups/hheyn/data/reference/refdata-cellranger-vdj-GRCh38-alts-ensembl-5.0.0"
+Hsapiens_path = "/scratch/groups/singlecell/data/reference/refdata-gex-GRCh38-2020-A"
+Hsapiens_vdj_path = "/scratch/groups/singlecell/data/reference/refdata-cellranger-vdj-GRCh38-alts-ensembl-5.0.0"

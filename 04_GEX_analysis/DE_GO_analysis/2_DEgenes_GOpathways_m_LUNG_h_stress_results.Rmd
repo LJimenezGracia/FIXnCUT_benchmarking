@@ -1,0 +1,329 @@
+---
+title: "Differential Expression Analysis (DEA)"
+author: "Laura Jiménez Gracia"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# Introduction
+We aim to find the transcriptional signatures associated with a particular condition.
+
+## Objective
+In this Rmarkdown document, we will explore the results of the Differential Expression Analysis (DEA) between the different levels associated to a particular condition.
+
+# Pre-processing
+## Libraries
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(ggrepel)
+library(enrichR)
+library(Seurat)
+```
+
+## Parameters
+Here we will define and load objects and functions that will be used throughout the document.
+```{r}
+# Paths
+path_r_objects <- here::here("04_GEX_analysis/DE_GO_analysis/results/R_objects")
+path_r_tables <- here::here("04_GEX_analysis/DE_GO_analysis/results/tables")
+path_r_figs <- here::here("04_GEX_analysis/DE_GO_analysis/results/figs")
+
+# Functions
+source(here::here("bin/utils.R"))
+
+# Define comparison parameters
+comparison_name_list <- c("Fixed_vs_Fresh")
+group_1_list <- c("Stress_Fix&Cut")
+group_2_list <- c("Stress_Fresh")
+```
+
+# DEA
+```{r fig.width=14, fig.height=10}
+for (index in 1:length(comparison_name_list)) {
+  comparison_name <- comparison_name_list[[index]]
+  group_1 <- group_1_list[[index]]
+  group_2 <- group_2_list[[index]]
+  
+  # Define comparison paths
+  #path_volcanoplot <- paste0(path_r_figs, "/scbatlle30_DEgenes_", comparison_name, ".png")
+  #path_GO_results <- paste0(path_r_tables, "/scbatlle30_GOBP21_", comparison_name, ".xlsx")
+  
+  # Load data
+  path_object <- paste0(path_r_objects, "/omniscope39_m_LUNG_healthy_stress_DEgenes_", comparison_name, ".rds")
+  DE_genes <- readRDS(path_object)
+  
+  
+  # Data exploration
+  print(paste0(comparison_name, ": ", group_1, " vs ", group_2))
+  print("Number of significant DE genes (padj < 0.05)")
+  print(table(DE_genes$is_significant))
+  print("Number of sDEgenes UP-regulated (& Log2FC > |0.5|)")
+  print(sum(DE_genes$avg_log2FC[DE_genes$is_significant == TRUE] > 0))
+  print(sum(DE_genes$avg_log2FC[DE_genes$is_significant == TRUE] > 0.25))
+  print("Number of sDEgenes DOWN-regulated (& Log2FC > |0.5|)")
+  print(sum(DE_genes$avg_log2FC[DE_genes$is_significant == TRUE] < 0))
+  print(sum(DE_genes$avg_log2FC[DE_genes$is_significant == TRUE] < -0.25))
+
+  # Volcano Plot
+  gg_volcanoplot <- gg_volcano_DEgenes(
+  DEgenes_df = DE_genes, 
+  title = comparison_name, 
+  ident_1 = group_1,
+  ident_2 = group_2,
+  threshold_log2FC = 0.25,
+  threshold_adjpval = -log10(0.001)
+  )
+  print(gg_volcanoplot)
+  
+  # Save results
+  #ggsave(filename = path_volcanoplot, plot = gg_volcanoplot)
+}
+```
+
+```{r fig.width=14, fig.height=10}
+# Holger's volcano
+
+# Load data
+path_object <- paste0(path_r_objects, "/omniscope39_m_LUNG_healthy_stress_DEgenes_", comparison_name, ".rds")
+DE_genes <- readRDS(path_object)
+title = comparison_name
+ident_1 = group_1
+ident_2 = group_2
+threshold_log2FC = 0.25
+threshold_adjpval = -log10(0.001)
+
+
+DEgenes_df <- DE_genes %>% 
+  mutate(is_sig_direction = case_when(
+    is_significant & avg_log2FC > threshold_log2FC ~ "UP",
+    is_significant & avg_log2FC < -threshold_log2FC ~ "DOWN",
+    TRUE ~ "FALSE"))
+
+# Subset sDE gene names
+subset_sig <- DEgenes_df %>% 
+  dplyr::filter(is_significant & abs(avg_log2FC) > threshold_log2FC) %>% 
+  filter(!grepl("^mt-", gene)) 
+top_up <- as.character(subset_sig$gene[subset_sig$avg_log2FC > 0][1:20])
+top_down <- subset_sig %>% 
+  dplyr::arrange(avg_log2FC)
+top_down <- as.character(top_down$gene[1:30])
+subset_sig <- subset_sig %>% 
+  dplyr::filter(gene %in% c(top_up, top_down))
+
+# Volcano plot
+volcano_plot <- DEgenes_df %>%
+  ggplot(aes(avg_log2FC, -1 * log10(p_val_adj), color = is_sig_direction)) +
+  geom_point(size = 1) +
+  scale_color_manual(
+    values = c("blue", "grey", "red"),
+    labels = c("Down-regulated genes",
+               "non-sDE genes",
+               "Up-regulated genes")) +    
+  geom_hline(yintercept = threshold_adjpval, color = "black", linetype = "dashed") +
+  geom_vline(xintercept = threshold_log2FC, color = "black", linetype = "dashed") +
+  geom_vline(xintercept = -threshold_log2FC, color = "black", linetype = "dashed") +
+  geom_text_repel(data = subset_sig, aes(label = gene), color = "black", max.overlaps = 30) +
+  labs(title = title,
+       x = paste0("Log2FC(", ident_1 , " / ", ident_2, ")"),
+       y = "-Log10(Adj p-value)",
+       color = "") +
+  theme_classic() +
+  theme(axis.title = element_text(size = 11),
+        legend.text = element_text(size = 11),
+        plot.title = element_text(hjust = 0.5, face = "bold"))
+
+volcano_plot
+```
+
+
+# GO analysis
+```{r fig.width=14, fig.height=10}
+for (index in 1:length(comparison_name_list)) {
+  comparison_name <- comparison_name_list[[index]]
+  group_1 <- group_1_list[[index]]
+  group_2 <- group_2_list[[index]]
+  
+  # Define comparison paths
+  #path_GO_results <- paste0(path_r_tables, "/scbatlle30_GOBP21_", comparison_name)
+  
+  # Load data
+  path_object <- paste0(path_r_objects, "/omniscope39_m_LUNG_healthy_stress_DEgenes_", comparison_name, ".rds")
+  DE_genes <- readRDS(path_object)
+
+  print(paste0(comparison_name, ": ", group_1, " vs ", group_2))
+  ## Pre-processing
+  DE_genes_up <- DE_genes %>% 
+    dplyr::filter(is_significant & avg_log2FC > 0.25) %>% 
+    dplyr::select(gene, avg_log2FC, p_val_adj)
+  DE_genes_down <- DE_genes %>% 
+    dplyr::filter(is_significant & avg_log2FC < -0.25) %>% 
+    dplyr::select(gene, avg_log2FC, p_val_adj)  
+
+  database <- "GO_Biological_Process_2021" # GO_Biological_Process_2021, KEGG_2021_Human, Reactome_2016
+  ## EnrichR
+  enrichR_results_up <- run_enrichR_forGO(
+    database = database,
+    DE_genes = DE_genes_up$gene,
+    adj_pval = 0.05,
+    number_enriched_genes = 5,
+    num_GO_size_min = 10,
+    num_GO_size_max = 300,
+    OR = 2
+  )
+  enrichR_results_down <- run_enrichR_forGO(
+  database = database,
+  DE_genes = DE_genes_down$gene,
+  adj_pval = 0.05,
+  number_enriched_genes = 5,
+  num_GO_size_min = 10,
+  num_GO_size_max = 300,
+  OR = 2
+)
+  
+  ## Filter reliable results
+  enrichR_results_up_filtered <- enrichR_results_up %>% 
+    dplyr::filter(is_reliable == TRUE)
+  enrichR_results_down_filtered <- enrichR_results_down %>% 
+  dplyr::filter(is_reliable == TRUE)
+  
+  ## Plot
+  gg_enrichR_GO_up <- gg_enrichR_GO(paste0(comparison_name, " UP-regulated"), 
+               database,
+               enrichR_results_up_filtered, 
+               n_top = 20)
+  print(gg_enrichR_GO_up)
+  
+  gg_enrichR_GO_down <- gg_enrichR_GO(paste0(comparison_name, " DOWN-regulated"),  
+             database,
+             enrichR_results_down_filtered, 
+             n_top = 20)
+  print(gg_enrichR_GO_down)
+  
+  ## Export list of GO pathways
+  #name_group_1 <- paste0(group_1, " UP")
+  #name_group_2 <- paste0(group_2, " DOWN")
+  #enrichR_results_split <- list(enrichR_results_up_filtered, enrichR_results_down_filtered)
+  #names(enrichR_results_split) <- c(name_group_1, name_group_2)
+  
+  # Save results
+  ## Export list of DE genes
+  #openxlsx::write.xlsx(enrichR_results_split, file = path_GO_results)  
+}
+```
+
+# Hallmark enrichment analysis
+```{r fig.width=14, fig.height=10}
+DE_genes_list <- list(DE_genes_up$gene, DE_genes_down$gene)
+names(DE_genes_list) <- c("FixnCut", "Fresh")
+myList <- list()
+
+for (index in 1:length(DE_genes_list)) {
+  # Define comparison paths
+  #path_GO_results <- paste0(path_r_tables, "/scbatlle30_GOBP21_", comparison_name)
+  condition <- names(DE_genes_list[index])
+  print(condition)
+  
+  DE_genes <- DE_genes_list[[index]]
+
+  database <- "MSigDB_Hallmark_2020" # GO_Biological_Process_2021, KEGG_2021_Human, Reactome_2016
+  ## EnrichR
+  enrichR_results <- run_enrichR_forGO(
+    database = database,
+    DE_genes = DE_genes,
+    adj_pval = 0.05,
+    number_enriched_genes = 5,
+    num_GO_size_min = 10,
+    num_GO_size_max = 300,
+    OR = 2
+  )
+  
+  ## Filter reliable results
+  enrichR_results_filtered <- enrichR_results %>% 
+    dplyr::filter(is_reliable == TRUE)
+  
+  ## Plot
+  gg_enrichR_hallmark <- gg_enrichR_GO(condition, 
+               database,
+               enrichR_results_filtered, 
+               n_top = 15)
+  print(gg_enrichR_hallmark)
+  myList[[length(myList)+1]] <- enrichR_results_filtered
+}
+names(myList) <- names(DE_genes_list)
+
+
+# Save results
+path_hallmark <- paste0(path_r_tables, "/omniscope39_m_LUNG_healthy_stress_hallmark_enrichment.xlsx")
+openxlsx::write.xlsx(myList, file = path_hallmark)  
+```
+
+#############
+# Pre-processing
+```{r}
+path_r_objects_in <- here::here("02_QC/results/R_objects")
+## Load data
+seurat_obj <- readRDS(paste0(path_r_objects_in, "/omniscope39_m_LUNG_healthy_stress_lognorm_harmony_processed.rds"))
+
+# Color palette
+set.seed(1234) # for reproducibility
+color_palette <- Polychrome::createPalette(35, c("#fc6060", "#74f774", "#7c7cfc"))
+names(color_palette) <- NULL
+#Polychrome::swatch(color_palette)
+```
+
+
+## VlnPlot hallmarks
+```{r}
+HALLMARK_APOPTOSIS <- msigdbr::msigdbr(species = "mouse", category = "H") %>%
+  filter(gs_name == "HALLMARK_APOPTOSIS")
+HALLMARK_APOPTOSIS <- HALLMARK_APOPTOSIS$gene_symbol
+
+HALLMARK_HYPOXIA <- msigdbr::msigdbr(species = "mouse", category = "H") %>%
+  filter(gs_name == "HALLMARK_HYPOXIA")
+HALLMARK_HYPOXIA <- HALLMARK_HYPOXIA$gene_symbol
+
+HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY <- msigdbr::msigdbr(species = "mouse", category = "H") %>%
+  filter(gs_name == "HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY")
+HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY <- HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY$gene_symbol
+
+seurat_obj <- AddModuleScore(seurat_obj,
+                               features = list(HALLMARK_APOPTOSIS,
+                                               HALLMARK_HYPOXIA,
+                                               HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY),
+                               name = c("HALLMARK_APOPTOSIS",
+                                        "HALLMARK_HYPOXIA",
+                                        "HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY")
+                              )
+```
+
+
+```{r fig.width=21, fig.height=7}
+VlnPlot(seurat_obj,
+        features = c("HALLMARK_APOPTOSIS1", "HALLMARK_HYPOXIA2", "HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY3"),
+        group.by = "sample_protocol",
+        cols = color_palette,
+        same.y.lims = TRUE,
+        pt.size = 0
+        ) &
+  #scale_fill_brewer(palette = "Paired", direction = -1) +
+      stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+                 geom='crossbar', colour = "black",
+                 width=0.25, position = position_dodge(width = .75)) #&
+    #ggpubr::stat_compare_means(ref.group = "Universal Fibroblasts", method = "wilcox.test",
+    #                             label = "p.signif")  + # p.format)
+  #ylim(-0.2, 0.7)
+```
+
+# Session info
+```{r}
+sessionInfo()
+```

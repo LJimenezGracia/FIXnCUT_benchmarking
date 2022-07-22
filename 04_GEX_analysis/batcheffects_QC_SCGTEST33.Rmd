@@ -27,6 +27,7 @@ library(Seurat)
 library(gt)
 library(CellMixS)
 library(SingleCellExperiment)
+library(variancePartition)
 ```
 
 ## Parameters
@@ -95,16 +96,61 @@ seurat_obj_final$sample_protocol <- factor(x = seurat_obj_final$sample_protocol,
 ```
 
 ```{r}
+# Subset HVF genes
+list_HVF <- VariableFeatures(seurat_obj_final)
+seurat_obj_final <- seurat_obj_final[list_HVF, ]
+
 # Extract raw counts and metadata to create SingleCellExperiment object
 counts_final <- seurat_obj_final@assays$RNA@counts 
 data_final <- seurat_obj_final@assays$RNA@data
 metadata_final <- seurat_obj_final@meta.data
 
+
 # Create single cell experiment object
 sce_final <- SingleCellExperiment(assays = list(counts = counts_final,
-                                          data = data_final), 
+                                          normcounts = data_final), 
                            colData = metadata_final)
 ```
+
+
+# Variance Partition: fitExtractVarPartModel
+
+    Scatter plot with explanatory variables (% variance) 
+    
+https://www.bioconductor.org/packages/release/bioc/html/variancePartition.html
+https://github.com/HelenaLC/simulation-comparison/blob/master/code/05-calc_qc-gene_pve.R 
+
+```{r}
+ppFUN <- function(sce) {
+    if ("normcounts" %in% assayNames(sce)) {
+        logcounts(sce) <- log(normcounts(sce)+1)
+    } else sce <- logNormCounts(sce)
+    return(sce)
+}
+
+qcFUN <- function(sce) {
+    i <- c("library_name", "celltypes_1")
+    i <- intersect(i, names(colData(sce)))
+    if (length(i) == 0) return(NULL)
+    y <- logcounts(sce)
+    if (!is.matrix(y))
+        y <- as.matrix(y)
+    y <- y[rowSums(y) != 0, ]    
+    f <- as.formula(sprintf("~(1|%s)", i))
+    cd <- data.frame(colData(sce)[i])
+    pve <- fitExtractVarPartModel(y, f, cd, 
+        quiet = TRUE, BPPARAM = SerialParam())
+    return(pve[[i]])
+}
+```
+
+```{r}
+sce_final <- ppFUN(sce_final)
+
+pve <- qcFUN(sce_final)
+```
+
+
 
 
 # CellMixS

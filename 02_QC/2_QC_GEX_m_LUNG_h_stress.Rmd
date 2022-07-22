@@ -1,5 +1,5 @@
 ---
-title: "GEX Quality control: mouse_LUNG_healthy"
+title: "GEX Quality control: mouse_LUNG_healthy_stress"
 author: "Laura Jiménez Gracia"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -46,23 +46,23 @@ source(here::here("bin/utils.R"))
 min_libsize <- 300
 max_libsize <- 50000
 
-min_ngenes <- 150
+min_ngenes <- 400
 max_ngenes <- 7500
 
-max_pctmt <- 25
+max_pctmt <- 15
 
-min_cells <- 8
+min_cells <- 5
 ```
 
 
 ## Load data
-The data used in this Rmarkdown document comes from **SCGTEST_33** dataset, filtered matrices were processed with `cellranger v6.1.1`, and the doublet predictions were obtained using `scrublet`.
+The data used in this Rmarkdown document comes from **OMNISCOPE_39** dataset, filtered matrices were processed with `cellranger v6.1.1`, and the doublet predictions were obtained using `scrublet`.
 ```{r}
 # Load all metadata information
 metadata <- read.csv(path_project_metadata)
 
-subproject_folder <- "SCGTEST_33"
-subproject_folder_n <- "SCGTEST33"
+subproject_folder <- "OMNISCOPE_39"
+subproject_folder_n <- "OMNISCOPE39"
 tissue <- "LUNG"
 
 # Merging metadata_all tables
@@ -253,8 +253,8 @@ cowplot::plot_grid(gg_libsize, gg_libcomplex, gg_mt, gg_rb, ncol = 2)
 ## Save merged data
 ```{r}
 # Save Merged Seurat object
-saveRDS(seurat_obj, str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_merged.rds"))
-#seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_merged.rds"))
+saveRDS(seurat_obj, str_c(path_r_objects, "/omniscope39_m_LUNG_healthy_stress_merged.rds"))
+#seurat_obj <- readRDS(str_c(path_r_objects, "/omniscope39_m_LUNG_healthy_stress_merged.rds"))
 ```
 
 
@@ -625,8 +625,8 @@ seurat_obj
 # Save filtered data
 ```{r}
 # Save Merged Seurat object
-saveRDS(seurat_obj, str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_filtered.rds"))
-#seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_filtered.rds"))
+saveRDS(seurat_obj, str_c(path_r_objects, "/omniscope39_m_LUNG_healthy_stress_filtered.rds"))
+#seurat_obj <- readRDS(str_c(path_r_objects, "/omniscope39_m_LUNG_healthy_stress_filtered.rds"))
 ```
 
 

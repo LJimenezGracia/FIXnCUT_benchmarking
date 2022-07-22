@@ -1,0 +1,3 @@
+sample_id,molecule_h5,library_name
+oa9aj5kk_p76emfj1,/scratch/devel/ljimenez/projects/FIXnCUT/01_cellranger_mapping/subprojects/OMNISCOPE_39/jobs/oa9aj5kk_p76emfj1/oa9aj5kk_p76emfj1/outs/per_sample_outs/oa9aj5kk_p76emfj1/count/sample_molecule_info.h5,lung_fresh_stress
+hxtf5ixx_gg6tqn1j,/scratch/devel/ljimenez/projects/FIXnCUT/01_cellranger_mapping/subprojects/OMNISCOPE_39/jobs/hxtf5ixx_gg6tqn1j/hxtf5ixx_gg6tqn1j/outs/per_sample_outs/hxtf5ixx_gg6tqn1j/count/sample_molecule_info.h5,lung_fixed_stress

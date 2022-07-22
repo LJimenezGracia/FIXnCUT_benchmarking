@@ -1,5 +1,5 @@
 ---
-title: "GEX Quality control: mouse_LUNG_healthy"
+title: "GEX Quality control: human_PBMC_healthy"
 author: "Laura Jiménez Gracia"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -44,10 +44,10 @@ source(here::here("bin/utils.R"))
 
 # Thresholds
 min_libsize <- 300
-max_libsize <- 50000
+max_libsize <- 25000
 
-min_ngenes <- 150
-max_ngenes <- 7500
+min_ngenes <- 250
+max_ngenes <- 5000
 
 max_pctmt <- 25
 
@@ -56,16 +56,16 @@ min_cells <- 8
 
 
 ## Load data
-The data used in this Rmarkdown document comes from **SCGTEST_33** dataset, filtered matrices were processed with `cellranger v6.1.1`, and the doublet predictions were obtained using `scrublet`.
+The data used in this Rmarkdown document comes from **SCGTEST_34** dataset, filtered matrices were processed with `cellranger v6.1.1`, and the doublet predictions were obtained using `scrublet`.
 ```{r}
 # Load all metadata information
 metadata <- read.csv(path_project_metadata)
 
-subproject_folder <- "SCGTEST_33"
-subproject_folder_n <- "SCGTEST33"
-tissue <- "LUNG"
-
 # Merging metadata_all tables
+subproject_folder <- "SCGTEST_34"
+subproject_folder_n <- "SCGTEST34"
+tissue <- "PBMC"
+
 metadata <- metadata %>% 
   filter(subproject == subproject_folder & tissue == tissue)
 
@@ -129,7 +129,6 @@ seurat_obj$disease <- as.factor(seurat_obj_metadata$disease)
 seurat_obj$sample_protocol <- as.factor(seurat_obj_metadata$sample_protocol)
 ```
 
-
 ## Add scrublet prediction
 ```{r}
 seurat_obj_list <- SplitObject(seurat_obj, split.by = "gem_id")
@@ -167,6 +166,7 @@ seurat_obj_list <- purrr::map2(seurat_obj_list,
 seurat_obj_list
 ```
 
+
 ## Merge Seurat list
 ```{r}
 seurat_obj <- merge(seurat_obj_list[[1]], 
@@ -175,7 +175,6 @@ seurat_obj <- merge(seurat_obj_list[[1]],
 # Remove Seurat object list
 rm(seurat_obj_list)
 ```
-
 
 
 # GEX quality control
@@ -212,7 +211,7 @@ gg_libcomplex <- seurat_obj@meta.data %>%
 # Calculate percentage mitocondrial genes
 seurat_obj$pct_mt <- PercentageFeatureSet(
   seurat_obj,
-  pattern = "^mt-"
+  pattern = "^MT-"
 )
 
 # Plot MT expression
@@ -231,7 +230,7 @@ gg_mt <- seurat_obj@meta.data %>%
 # Calculate percentage ribosomal genes
 seurat_obj$pct_rb <- PercentageFeatureSet(
   seurat_obj,
-  pattern = "^Rp[sl]")
+  pattern = "^RP[SL]")
 
 # Plot RB expression
 gg_rb <- seurat_obj@meta.data %>%
@@ -253,8 +252,8 @@ cowplot::plot_grid(gg_libsize, gg_libcomplex, gg_mt, gg_rb, ncol = 2)
 ## Save merged data
 ```{r}
 # Save Merged Seurat object
-saveRDS(seurat_obj, str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_merged.rds"))
-#seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_merged.rds"))
+saveRDS(seurat_obj, str_c(path_r_objects, "/scgtest34_h_PBMC_healthy_merged.rds"))
+#seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest34_h_PBMC_healthy_merged.rds"))
 ```
 
 
@@ -625,8 +624,8 @@ seurat_obj
 # Save filtered data
 ```{r}
 # Save Merged Seurat object
-saveRDS(seurat_obj, str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_filtered.rds"))
-#seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_filtered.rds"))
+saveRDS(seurat_obj, str_c(path_r_objects, "/scgtest34_h_PBMC_healthy_filtered.rds"))
+#seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest34_h_PBMC_healthy_filtered.rds"))
 ```
 
 

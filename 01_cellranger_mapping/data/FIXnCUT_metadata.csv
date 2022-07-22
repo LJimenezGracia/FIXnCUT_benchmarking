@@ -8,3 +8,7 @@ SCGTEST,FIXnCUT,SCGTEST_33,btvimge6_fuk14b5o,243892,Lung_cryo,AX2433,cDNA,SC3Pv3
 SCGTEST,FIXnCUT,SCGTEST_33,wa4ylezj_f7kjs3op,243893,Lung_fixed_24h,AX2434,cDNA,SC3Pv3,10000,not_hashed,Mouse,Lung,Healthy,Fix&Cut_24h
 SCGTEST,FIXnCUT,SCGTEST_33,uyzd7xqc_jkya4jyl,243894,Lung_fixed_cryo,AX2435,cDNA,SC3Pv3,10000,not_hashed,Mouse,Lung,Healthy,Fix&Cut+Cryopreservation
 SCGTEST,FIXnCUT,SCGTEST_33,pbx8gfoi_esb8tlli,243895,Lung_fixed_7days,AX2436,cDNA,SC3Pv3,10000,not_hashed,Mouse,Lung,Healthy,Fix&Cut_7d
+SCGTEST,FIXnCUT,SCGTEST_34,d9dyw64v_o4ypmvlg,247683,CNAG81_fresh,AX4540,cDNA,SC3Pv3,8000,not_hashed,Human,PBMC,Healthy,Fresh
+SCGTEST,FIXnCUT,SCGTEST_34,r7nri3n5_f7z94ntj,247684,CNAG81_fixed,AX4541,cDNA,SC3Pv3,8000,not_hashed,Human,PBMC,Healthy,Fix&Cut_24h
+OMNISCOPE,FIXnCUT,OMNISCOPE_39,oa9aj5kk_p76emfj1,253961,lung_fresh_stress,AX9828,cDNA,SC3Pv3,10000,not_hashed,Mouse,Lung,Healthy,Stress_Fresh
+OMNISCOPE,FIXnCUT,OMNISCOPE_39,hxtf5ixx_gg6tqn1j,253962,lung_fixed_stress,AX9829,cDNA,SC3Pv3,10000,not_hashed,Mouse,Lung,Healthy,Stress_Fix&Cut

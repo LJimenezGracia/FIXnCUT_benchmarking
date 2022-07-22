@@ -41,9 +41,9 @@ path_r_figs <- here::here("04_GEX_analysis/DE_GO_analysis/results/figs")
 source(here::here("bin/utils.R"))
 
 # Define comparison parameters
-comparison_name_list <- c("Fixed24h_vs_Fresh", "Fixed7d_vs_Fresh", "Cryo_vs_Fresh", "FixedCryo_vs_Fresh")
-group_1_list <- c("Fix&Cut_24h", "Fix&Cut_7d", "Cryopreservation", "Fix&Cut+Cryopreservation")
-group_2_list <- c("Fresh", "Fresh", "Fresh", "Fresh")
+comparison_name_list <- c("Fixed_vs_Fresh")
+group_1_list <- c("Fix&Cut_24h")
+group_2_list <- c("Fresh")
 ```
 
 # DEA
@@ -58,7 +58,7 @@ for (index in 1:length(comparison_name_list)) {
   #path_GO_results <- paste0(path_r_tables, "/scbatlle30_GOBP21_", comparison_name, ".xlsx")
   
   # Load data
-  path_object <- paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_DEgenes_", comparison_name, ".rds")
+  path_object <- paste0(path_r_objects, "/scgtest34_h_PBMC_healthy_DEgenes_", comparison_name, ".rds")
   DE_genes <- readRDS(path_object)
   
   
@@ -89,173 +89,6 @@ for (index in 1:length(comparison_name_list)) {
 }
 ```
 
-## Comparison across preservation protocols
-```{r}
-abs_log2FC <- 0.25
-```
-
-### UP-sDE
-```{r fig.height=5, fig.width=7}
-DE_genes_list <- list()
-
-for (index in 1:length(comparison_name_list)) {
-  comparison_name <- comparison_name_list[[index]]
-  group_1 <- group_1_list[[index]]
-  group_2 <- group_2_list[[index]]
-  
-  # Load data
-  path_object <- paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_DEgenes_", comparison_name, ".rds")
-  DE_genes <- readRDS(path_object)
-
-  print(paste0(comparison_name, ": ", group_1, " vs ", group_2))
-  ## Pre-processing
-  DE_genes_filt <- DE_genes %>% 
-    dplyr::filter(is_significant & avg_log2FC > abs_log2FC) %>% 
-    dplyr::select(gene)
-  print(length(DE_genes_filt$gene))
-  
-  DE_genes_list[index] <- DE_genes_filt
-}
-
-names(DE_genes_list) <- group_1_list
-
-
-# Plot UP-regulated
-UpSetR::upset(
-  UpSetR::fromList(list(
-    "Fix&Cut_24h" = DE_genes_list$`Fix&Cut_24h`,
-    "Fix&Cut_7d" = DE_genes_list$`Fix&Cut_7d`,
-    "Cryopreservation" = DE_genes_list$Cryopreservation,
-    "Fix&Cut+Cryopreservation" = DE_genes_list$`Fix&Cut+Cryopreservation`
-  )),
-  nsets = 6,
-  order.by = "freq",
-  #group.by = "sets",
-  mainbar.y.label = "# Genes", sets.x.label = "# Genes / sample",
-  point.size = 4, line.size = 1,
-  empty.intersections = "on",
-  queries = list(
-     list(query = UpSetR::intersects, 
-          params = list("Fix&Cut_24h", "Fix&Cut_7d", "Cryopreservation", "Fix&Cut+Cryopreservation"), 
-          color = "orange", active = T)
-  )
-)
-```
-
-
-```{r}
-sDE_UP_intersect <- Reduce(intersect,
-       list(DE_genes_list$`Fix&Cut_24h`,
-            DE_genes_list$`Fix&Cut_7d`,
-            DE_genes_list$Cryopreservation,DE_genes_list$`Fix&Cut+Cryopreservation`
-            )
-       )
-sDE_UP_intersect
-```
-
-
-### DOWN-sDE
-```{r fig.height=5, fig.width=7}
-DE_genes_list <- list()
-
-for (index in 1:length(comparison_name_list)) {
-  comparison_name <- comparison_name_list[[index]]
-  group_1 <- group_1_list[[index]]
-  group_2 <- group_2_list[[index]]
-  
-  # Load data
-  path_object <- paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_DEgenes_", comparison_name, ".rds")
-  DE_genes <- readRDS(path_object)
-
-  print(paste0(comparison_name, ": ", group_1, " vs ", group_2))
-  ## Pre-processing
-  DE_genes_filt <- DE_genes %>% 
-    dplyr::filter(is_significant & avg_log2FC < -abs_log2FC) %>% 
-    dplyr::select(gene)
-  print(length(DE_genes_filt$gene))
-  
-  DE_genes_list[index] <- DE_genes_filt
-}
-
-names(DE_genes_list) <- group_1_list
-
-
-# Plot UP-regulated
-UpSetR::upset(
-  UpSetR::fromList(list(
-    "Fix&Cut_24h" = DE_genes_list$`Fix&Cut_24h`,
-    "Fix&Cut_7d" = DE_genes_list$`Fix&Cut_7d`,
-    "Cryopreservation" = DE_genes_list$Cryopreservation,
-    "Fix&Cut+Cryopreservation" = DE_genes_list$`Fix&Cut+Cryopreservation`
-  )),
-  nsets = 6,
-  order.by = "freq",
-  #group.by = "sets",
-  mainbar.y.label = "# Genes", sets.x.label = "# Genes / sample",
-  point.size = 4, line.size = 1,
-  empty.intersections = "on",
-  queries = list(
-     list(query = UpSetR::intersects, 
-          params = list("Fix&Cut_24h", "Fix&Cut_7d", "Cryopreservation", "Fix&Cut+Cryopreservation"), 
-          color = "orange", active = T)
-  )
-)
-```
-
-```{r}
-sDE_DOWN_intersect <- Reduce(intersect,
-       list(DE_genes_list$`Fix&Cut_24h`,
-            DE_genes_list$`Fix&Cut_7d`,
-            DE_genes_list$Cryopreservation,DE_genes_list$`Fix&Cut+Cryopreservation`
-            )
-       )
-sDE_DOWN_intersect
-```
-
-### GO
-```{r fig.width=14, fig.height=10}
-  database <- "GO_Biological_Process_2021" # GO_Biological_Process_2021, KEGG_2021_Human, Reactome_2016
-  ## EnrichR
-  enrichR_results_up <- run_enrichR_forGO(
-    database = database,
-    DE_genes = sDE_UP_intersect,
-    adj_pval = 0.05,
-    number_enriched_genes = 5,
-    num_GO_size_min = 10,
-    num_GO_size_max = 300,
-    OR = 2
-  )
-  enrichR_results_down <- run_enrichR_forGO(
-  database = database,
-  DE_genes = sDE_DOWN_intersect,
-  adj_pval = 0.05,
-  number_enriched_genes = 5,
-  num_GO_size_min = 10,
-  num_GO_size_max = 300,
-  OR = 2
-)
-  
-  ## Filter reliable results
-  enrichR_results_up_filtered <- enrichR_results_up %>% 
-    dplyr::filter(is_reliable == TRUE)
-  enrichR_results_down_filtered <- enrichR_results_down %>% 
-  dplyr::filter(is_reliable == TRUE)
-  
-  ## Plot
-  gg_enrichR_GO_up <- gg_enrichR_GO(paste0("Intersection UP-regulated"), 
-               database,
-               enrichR_results_up_filtered, 
-               n_top = 20)
-  print(gg_enrichR_GO_up)
-  
-  gg_enrichR_GO_down <- gg_enrichR_GO(paste0("Intersection DOWN-regulated"),  
-             database,
-             enrichR_results_down_filtered, 
-             n_top = 20)
-  print(gg_enrichR_GO_down)
-```
-
-
 
 # GO analysis
 ```{r fig.width=14, fig.height=10}
@@ -268,7 +101,7 @@ for (index in 1:length(comparison_name_list)) {
   #path_GO_results <- paste0(path_r_tables, "/scbatlle30_GOBP21_", comparison_name)
   
   # Load data
-  path_object <- paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_DEgenes_", comparison_name, ".rds")
+  path_object <- paste0(path_r_objects, "/scgtest34_h_PBMC_healthy_DEgenes_", comparison_name, ".rds")
   DE_genes <- readRDS(path_object)
 
   print(paste0(comparison_name, ": ", group_1, " vs ", group_2))
@@ -343,7 +176,7 @@ for (index in 1:length(comparison_name_list)) {
   #path_GO_results <- paste0(path_r_tables, "/scbatlle30_GOBP21_", comparison_name)
   
   # Load data
-  path_object <- paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_DEgenes_", comparison_name, ".rds")
+  path_object <- paste0(path_r_objects, "/scgtest34_h_PBMC_healthy_DEgenes_", comparison_name, ".rds")
   DE_genes <- readRDS(path_object)
 
   print(paste0(comparison_name, ": ", group_1, " vs ", group_2))

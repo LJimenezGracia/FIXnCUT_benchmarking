@@ -52,14 +52,14 @@ metadata_variables_confounder <- c("nCount_RNA", "nFeature_RNA", "gem_id",
 ```
 
 ## Load metadata
-The data used in this Rmarkdown document comes from **SCGTEST_33** dataset.
+The data used in this Rmarkdown document comes from **SCGTEST_34** dataset.
 ```{r}
 # Load all metadata information
 metadata <- read.csv(path_project_metadata)
 
 # Merging metadata tables
 metadata <- metadata %>% 
-  filter(subproject == "SCGTEST_33" & tissue == "Lung")
+  filter(subproject == "SCGTEST_34" & tissue == "PBMC")
 
 print("Libraries/Samples metadata")
 DT::datatable(metadata, options = list(scrollX = TRUE))
@@ -69,7 +69,7 @@ DT::datatable(metadata, options = list(scrollX = TRUE))
 # Explore QC pre-filtering
 ```{r}
 # Load Seurat object
-seurat_obj <- readRDS(paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_merged.rds"))
+seurat_obj <- readRDS(paste0(path_r_objects, "/scgtest34_h_PBMC_healthy_merged.rds"))
 seurat_obj
 ```
 
@@ -80,9 +80,6 @@ table_qc_gex(seurat_obj@meta.data, subtitle = "Before cell QC filtering out")
 ```
 
 ```{r fig.height=5, fig.width=14}
-seurat_obj$library_name <- factor(x = seurat_obj$library_name,
-                                    levels = c("Lung_fresh", "Lung_fixed_24h", "Lung_fixed_7days", "Lung_cryo", "Lung_fixed_cryo"))
-
 gg_qc_by_gemid1 <- VlnPlot(seurat_obj,
                           features = c("nCount_RNA", "nFeature_RNA"),
                           group.by = "library_name",
@@ -114,7 +111,7 @@ cowplot::plot_grid(gg_qc_by_gemid1, gg_qc_by_gemid2, ncol = 2, rel_widths = c(1.
 
 # HVG across samples
 ```{r}
-seurat_obj <- readRDS(paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_lognorm_processed.rds"))
+seurat_obj <- readRDS(paste0(path_r_objects, "/scgtest34_h_PBMC_healthy_lognorm_processed.rds"))
 seurat_obj
 ```
 
@@ -129,24 +126,12 @@ common_HVG <- VariableFeatures(seurat_obj)
 seurat_obj_list <- SplitObject(seurat_obj, split.by = "library_name")
 
 # Fresh HVG
-seurat_obj_list$Lung_fresh <- FindVariableFeatures(seurat_obj_list$Lung_fresh, nfeatures = 3000)
-fresh_HVG <- VariableFeatures(seurat_obj_list$Lung_fresh)
+seurat_obj_list$CNAG81_fresh <- FindVariableFeatures(seurat_obj_list$CNAG81_fresh, nfeatures = 3000)
+fresh_HVG <- VariableFeatures(seurat_obj_list$CNAG81_fresh)
 
 # Fix&Cut HVG
-seurat_obj_list$Lung_fixed_24h <- FindVariableFeatures(seurat_obj_list$Lung_fixed_24h, nfeatures = 3000)
-fixed_HVG <- VariableFeatures(seurat_obj_list$Lung_fixed_24h)
-
-# Lung_fixed_7days
-seurat_obj_list$Lung_fixed_7days <- FindVariableFeatures(seurat_obj_list$Lung_fixed_7days, nfeatures = 3000)
-fixed7_HVG <- VariableFeatures(seurat_obj_list$Lung_fixed_7days)
-
-# Lung_cryo
-seurat_obj_list$Lung_cryo <- FindVariableFeatures(seurat_obj_list$Lung_cryo, nfeatures = 3000)
-cryo_HVG <- VariableFeatures(seurat_obj_list$Lung_cryo)
-
-# Lung_fixed_cryo
-seurat_obj_list$Lung_fixed_cryo <- FindVariableFeatures(seurat_obj_list$Lung_fixed_cryo, nfeatures = 3000)
-fixedcryo_HVG <- VariableFeatures(seurat_obj_list$Lung_fixed_cryo)
+seurat_obj_list$CNAG81_fixed <- FindVariableFeatures(seurat_obj_list$CNAG81_fixed, nfeatures = 3000)
+fixed_HVG <- VariableFeatures(seurat_obj_list$CNAG81_fixed)
 ```
 
 
@@ -154,12 +139,9 @@ fixedcryo_HVG <- VariableFeatures(seurat_obj_list$Lung_fixed_cryo)
 ```{r fig.height=5, fig.width=10}
 UpSetR::upset(
   UpSetR::fromList(list(
-    "Lung_all" = common_HVG,
-    "Lung_fixed_24h" = fixed_HVG,
-    "Lung_fresh" = fresh_HVG,
-    "Lung_fixed_7days" = fixed7_HVG,
-    "Lung_cryo" = cryo_HVG,
-    "Lung_fixed_cryo" = fixedcryo_HVG
+    "PBMC_all" = common_HVG,
+    "PBMC_fixed_24h" = fixed_HVG,
+    "PBMC_fresh" = fresh_HVG
   )),
   nsets = 6,
   order.by = "freq",
@@ -168,53 +150,15 @@ UpSetR::upset(
   point.size = 4, line.size = 1,
   empty.intersections = "on",
   queries = list(
-     list(query = UpSetR::intersects, params = list("Lung_all", "Lung_fixed_24h", "Lung_fresh", "Lung_fixed_7days",
-                                                    "Lung_cryo", "Lung_fixed_cryo"), color = "green", active = T),
-     list(query = UpSetR::intersects, params = list("Lung_all", "Lung_fixed_24h", "Lung_fresh",
-                                                    "Lung_cryo", "Lung_fixed_cryo"), color = "darkgreen", active = T),     
-     list(query = UpSetR::intersects, params = list("Lung_fixed_7days"), color = "red", active = T)
-  )
+     list(query = UpSetR::intersects, params = list("PBMC_all", "PBMC_fixed_24h", "PBMC_fresh"), color = "green", active = T) )
 )
 ```
 
 
 ## Exclusive HVG
 ```{r}
-# Exclusive in Fix&Cut 7 days
-length(setdiff(fixed7_HVG, unlist(list(common_HVG, fixed_HVG, fresh_HVG, cryo_HVG, fixedcryo_HVG))))
 
-fixed7_exclusive <- setdiff(fixed7_HVG, unlist(list(common_HVG, fixed_HVG, fresh_HVG, cryo_HVG, fixedcryo_HVG)))
-head(fixed7_exclusive)
 ```
-
-
-```{r fig.width=14, fig.height=10}
-library(enrichR)
-
-database <- "GO_Biological_Process_2021" # GO_Biological_Process_2021, KEGG_2021_Human, Reactome_2016
-## EnrichR
-enrichR_results_up <- run_enrichR_forGO(
-  database = database,
-  DE_genes = fixed7_exclusive,
-  adj_pval = 0.05,
-  number_enriched_genes = 5,
-  num_GO_size_min = 10,
-  num_GO_size_max = 300,
-  OR = 2
-)
-
-## Filter reliable results
-enrichR_results_up_filtered <- enrichR_results_up %>% 
-  dplyr::filter(is_reliable == TRUE)
-
-## Plot
-gg_enrichR_GO_up <- gg_enrichR_GO(paste0("fixed7_exclusive"), 
-             database,
-             enrichR_results_up_filtered, 
-             n_top = 20)
-print(gg_enrichR_GO_up)
-```
-
 
 
 # Pseudo-bulk gene expression profiles & correlation
@@ -222,7 +166,10 @@ https://hbctraining.github.io/scRNA-seq/lessons/pseudobulk_DESeq2_scrnaseq.html
 
 ```{r}
 # Load Seurat object
-seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_filtered.rds"))
+path_r_objects <- here::here("03_clustering_annotation/results/R_objects")
+seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest34_h_PBMC_healthy_cells1_clustering_annotation.rds"))
+
+seurat_obj <- subset(seurat_obj, celltypes_1 != "Low quality cells")
 seurat_obj
 ```
 
@@ -247,7 +194,7 @@ table(sce$library_name)
 n_cells <- as.numeric(table(sce$library_name))
 
 ## Determine how to reoder the samples (rows) of the metadata to match the order of sample names in side vector
-m <- match(c("Lung_fresh", "Lung_fixed_24h", "Lung_fixed_7days", "Lung_cryo", "Lung_fixed_cryo"), sce$library_name)
+m <- match(c("CNAG81_fresh", "CNAG81_fixed"), sce$library_name)
 
 ## Create the sample level metadata by combining the reordered metadata with the number of cells corresponding to each sample.
 ei <- data.frame(colData(sce)[m, ], 
@@ -280,7 +227,7 @@ pb <- Matrix.utils::aggregate.Matrix(t(counts(sce)),
 
 class(pb)
 dim(pb)
-pb[1:5, 1:8]
+pb[1:2, 1:5]
 ```
 
 ```{r}
@@ -305,122 +252,102 @@ head(MM)
 ```
 
 
-```{r fig.width=12, fig.height=10}
+```{r fig.width=6, fig.height=5}
 # Pearson correlation between 2 variables
-gg_list <- purrr::map(c("Lung_fixed_24h", "Lung_fixed_7days", "Lung_cryo", "Lung_fixed_cryo"), function(library) {
-  ggpubr::ggscatter(MM, x = "Lung_fresh", y = library, 
-          add = "reg.line", # Add regression line
-          add.params = list(color = "blue", fill = "lightgray"),
-          conf.int = TRUE, # Add confidence interval
-          cor.coef = TRUE, 
-          cor.method = "pearson", # Add correlation coefficient.
-          xlab = "Lung_fresh", ylab = library, 
-          title = "Pseudo-bulk Pearson correlation")
-    })
-
-cowplot::plot_grid(plotlist = gg_list, ncol = 2)
+ggpubr::ggscatter(MM, x = "CNAG81_fresh", y = "CNAG81_fixed", 
+        add = "reg.line", # Add regression line
+        add.params = list(color = "blue", fill = "lightgray"),
+        conf.int = TRUE, # Add confidence interval
+        cor.coef = TRUE, 
+        cor.method = "pearson", # Add correlation coefficient.
+          xlab = "Fresh", ylab = "Fixed", 
+        title = "Pseudo-bulk Pearson correlation")
 ```
 
 
 ## By hallmark
 ```{r}
 # Getting HALLMARK genes
-HALLMARK_APOPTOSIS <- msigdbr::msigdbr(species = "mouse", category = "H") %>%
+HALLMARK_APOPTOSIS <- msigdbr::msigdbr(species = "human", category = "H") %>%
   filter(gs_name == "HALLMARK_APOPTOSIS")
 HALLMARK_APOPTOSIS <- HALLMARK_APOPTOSIS$gene_symbol
 
-HALLMARK_HYPOXIA <- msigdbr::msigdbr(species = "mouse", category = "H") %>%
+HALLMARK_HYPOXIA <- msigdbr::msigdbr(species = "human", category = "H") %>%
   filter(gs_name == "HALLMARK_HYPOXIA")
 HALLMARK_HYPOXIA <- HALLMARK_HYPOXIA$gene_symbol
 
-HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY <- msigdbr::msigdbr(species = "mouse", category = "H") %>%
+HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY <- msigdbr::msigdbr(species = "human", category = "H") %>%
   filter(gs_name == "HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY")
 HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY <- HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY$gene_symbol
 
-HALLMARK_G2M_CHECKPOINT <- msigdbr::msigdbr(species = "mouse", category = "H") %>%
+HALLMARK_G2M_CHECKPOINT <- msigdbr::msigdbr(species = "human", category = "H") %>%
   filter(gs_name == "HALLMARK_G2M_CHECKPOINT")
 HALLMARK_G2M_CHECKPOINT <- HALLMARK_G2M_CHECKPOINT$gene_symbol
 ```
 
 ### HALLMARK_APOPTOSIS
-```{r fig.width=12, fig.height=10}
+```{r fig.width=6, fig.height=5}
 MM_subset <- MM %>% 
   filter(row.names(MM) %in% HALLMARK_APOPTOSIS)
 
 # Pearson correlation between 2 variables
-gg_list <- purrr::map(c("Lung_fixed_24h", "Lung_fixed_7days", "Lung_cryo", "Lung_fixed_cryo"), function(library) {
-  ggpubr::ggscatter(MM_subset, x = "Lung_fresh", y = library, 
+ggpubr::ggscatter(MM_subset, x = "CNAG81_fresh", y = "CNAG81_fixed", 
           add = "reg.line", # Add regression line
           add.params = list(color = "blue", fill = "lightgray"),
           conf.int = TRUE, # Add confidence interval
           cor.coef = TRUE, 
           cor.method = "pearson", # Add correlation coefficient.
-          xlab = "Lung_fresh", ylab = library, 
+          xlab = "Fresh", ylab = "Fixed", 
           title = "Pseudo-bulk Pearson correlation _ HALLMARK_APOPTOSIS")
-    })
-
-cowplot::plot_grid(plotlist = gg_list, ncol = 2)
 ```
 
 
 ### HALLMARK_HYPOXIA
-```{r fig.width=12, fig.height=10}
+```{r fig.width=6, fig.height=5}
 MM_subset <- MM %>% 
   filter(row.names(MM) %in% HALLMARK_HYPOXIA)
 
 # Pearson correlation between 2 variables
-gg_list <- purrr::map(c("Lung_fixed_24h", "Lung_fixed_7days", "Lung_cryo", "Lung_fixed_cryo"), function(library) {
-  ggpubr::ggscatter(MM_subset, x = "Lung_fresh", y = library, 
+ggpubr::ggscatter(MM_subset, x = "CNAG81_fresh", y = "CNAG81_fixed", 
           add = "reg.line", # Add regression line
           add.params = list(color = "blue", fill = "lightgray"),
           conf.int = TRUE, # Add confidence interval
           cor.coef = TRUE, 
           cor.method = "pearson", # Add correlation coefficient.
-          xlab = "Lung_fresh", ylab = library, 
+          xlab = "Fresh", ylab = "Fixed", 
           title = "Pseudo-bulk Pearson correlation _ HALLMARK_HYPOXIA")
-    })
-
-cowplot::plot_grid(plotlist = gg_list, ncol = 2)
 ```
 
 ### HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY
-```{r fig.width=12, fig.height=10}
+```{r fig.width=6, fig.height=5}
 MM_subset <- MM %>% 
   filter(row.names(MM) %in% HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY)
 
 # Pearson correlation between 2 variables
-gg_list <- purrr::map(c("Lung_fixed_24h", "Lung_fixed_7days", "Lung_cryo", "Lung_fixed_cryo"), function(library) {
-  ggpubr::ggscatter(MM_subset, x = "Lung_fresh", y = library, 
+ggpubr::ggscatter(MM_subset, x = "CNAG81_fresh", y = "CNAG81_fixed", 
           add = "reg.line", # Add regression line
           add.params = list(color = "blue", fill = "lightgray"),
           conf.int = TRUE, # Add confidence interval
           cor.coef = TRUE, 
           cor.method = "pearson", # Add correlation coefficient.
-          xlab = "Lung_fresh", ylab = library, 
-          title = "Pseudo-bulk Pearson correlation _ HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY")
-    })
-
-cowplot::plot_grid(plotlist = gg_list, ncol = 2)
+          xlab = "Fresh", ylab = "Fixed", 
+          title = "Pseudo-bulk Pearson correlation _ HALLMARK_ROS_PATHWAY")
 ```
 
 ### HALLMARK_G2M_CHECKPOINT
-```{r fig.width=12, fig.height=10}
+```{r fig.width=6, fig.height=5}
 MM_subset <- MM %>% 
   filter(row.names(MM) %in% HALLMARK_G2M_CHECKPOINT)
 
 # Pearson correlation between 2 variables
-gg_list <- purrr::map(c("Lung_fixed_24h", "Lung_fixed_7days", "Lung_cryo", "Lung_fixed_cryo"), function(library) {
-  ggpubr::ggscatter(MM_subset, x = "Lung_fresh", y = library, 
+ggpubr::ggscatter(MM_subset, x = "CNAG81_fresh", y = "CNAG81_fixed", 
           add = "reg.line", # Add regression line
           add.params = list(color = "blue", fill = "lightgray"),
           conf.int = TRUE, # Add confidence interval
           cor.coef = TRUE, 
           cor.method = "pearson", # Add correlation coefficient.
-          xlab = "Lung_fresh", ylab = library, 
+          xlab = "Fresh", ylab = "Fixed", 
           title = "Pseudo-bulk Pearson correlation _ HALLMARK_G2M_CHECKPOINT")
-    })
-
-cowplot::plot_grid(plotlist = gg_list, ncol = 2)
 ```
 
 
@@ -431,16 +358,13 @@ https://hbctraining.github.io/scRNA-seq/lessons/pseudobulk_DESeq2_scrnaseq.html
 # Load Seurat object
 path_r_objects <- here::here("03_clustering_annotation/results/R_objects")
 
-seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_cells1_clustering_annotation.rds"))
+seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest34_h_PBMC_healthy_cells1_clustering_annotation.rds"))
 seurat_obj
 
 Idents(seurat_obj) <- "library_name"
 seurat_obj <- RenameIdents(seurat_obj,
-             "Lung_fresh" = "Lung-fresh",
-             "Lung_fixed_24h" = "Lung-fixed-24h",
-             "Lung_fixed_7days" = "Lung-fixed-7days",
-             "Lung_cryo" = "Lung-cryo",
-             "Lung_fixed_cryo" = "Lung-fixed-cryo"
+             "CNAG81_fresh" = "CNAG81-fresh",
+             "CNAG81_fixed" = "CNAG81-fixed"
              )
 seurat_obj$library_name <- as.character(seurat_obj@active.ident)
 Idents(seurat_obj) <- "celltypes_1"
@@ -473,7 +397,7 @@ table(sce$library_name)
 n_cells <- as.numeric(table(sce$library_name))
 
 ## Determine how to reoder the samples (rows) of the metadata to match the order of sample names in side vector
-m <- match(c("Lung-fresh", "Lung-fixed-24h", "Lung-fixed-7days", "Lung-cryo", "Lung-fixed-cryo"), sce$library_name)
+m <- match(c("CNAG81-fresh", "CNAG81-fixed"), sce$library_name)
 
 ## Create the sample level metadata by combining the reordered metadata with the number of cells corresponding to each sample.
 ei <- data.frame(colData(sce)[m, ], 
@@ -562,20 +486,17 @@ for (cluster in sort(unique(seurat_obj$celltypes_1))) {
     head(MM)
     
     # Pearson correlation between 2 variables
-    gg_list <- purrr::map(c("_Lung-fixed-24h", "_Lung-fixed-7days", "_Lung-cryo", "_Lung-fixed-cryo"), function(library)
-      {
-      ggpubr::ggscatter(MM, x = "_Lung-fresh", y = library, 
-              add = "reg.line", # Add regression line
-              add.params = list(color = "blue", fill = "lightgray"),
-              conf.int = TRUE, # Add confidence interval
-              cor.coef = TRUE, 
-              cor.method = "pearson", # Add correlation coefficient.
-              xlab = "Lung_fresh", ylab = library, 
-              title = paste0(cluster, " -bulk Pearson correlation"))
-        })
-    
-    print(cowplot::plot_grid(plotlist = gg_list, ncol = 2))
-    }
+    gg <- ggpubr::ggscatter(MM, x = "_CNAG81-fresh", y = "_CNAG81-fixed", 
+                  add = "reg.line", # Add regression line
+                  add.params = list(color = "blue", fill = "lightgray"),
+                  conf.int = TRUE, # Add confidence interval
+                  cor.coef = TRUE, 
+                  cor.method = "pearson", # Add correlation coefficient.
+                  xlab = "Fresh", ylab = "Fixed", 
+                  title = paste0(cluster, " -bulk Pearson correlation"))
+    print(gg)
+
+  }
 }
 ```
 
@@ -593,7 +514,7 @@ pseudobulk_cond <- function(seurat_obj) {
   n_cells <- as.numeric(table(sce$library_name))
   
   ## Determine how to reoder the samples (rows) of the metadata to match the order of sample names in side vector
-  m <- match(c("Lung-fresh", "Lung-fixed-24h", "Lung-fixed-7days", "Lung-cryo", "Lung-fixed-cryo"), sce$library_name)
+  m <- match(c("CNAG81-fresh", "CNAG81-fixed"), sce$library_name)
   
   ## Create the sample level metadata by combining the reordered metadata with the number of cells corresponding to each sample.
   #ei <- data.frame(colData(sce)[m, ], n_cells, row.names = NULL) %>% 
@@ -651,18 +572,16 @@ for (cluster in sort(unique(seurat_obj$celltypes_1))) {
     MM <- pseudobulk_cond(seurat_obj_c)
     
     # Pearson correlation between 2 variables
-    gg_list <- purrr::map(c("Lung-fixed-24h", "Lung-fixed-7days", "Lung-cryo", "Lung-fixed-cryo"), function(library) {
-      ggpubr::ggscatter(MM, x = "Lung-fresh", y = library, 
+    gg <- ggpubr::ggscatter(MM, x = "CNAG81-fresh", y = "CNAG81-fixed", 
               add = "reg.line", # Add regression line
               add.params = list(color = "blue", fill = "lightgray"),
               conf.int = TRUE, # Add confidence interval
               cor.coef = TRUE, 
               cor.method = "pearson", # Add correlation coefficient.
-              xlab = "Lung_fresh", ylab = library, 
+              xlab = "Fresh", ylab = "Fixed", 
               title = paste0(cluster, " -bulk Pearson correlation"))
-        })
-    
-    print(cowplot::plot_grid(plotlist = gg_list, ncol = 2))
+
+    print(gg)
   }
 }
 ```

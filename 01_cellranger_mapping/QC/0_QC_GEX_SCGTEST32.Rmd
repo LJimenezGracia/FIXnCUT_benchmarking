@@ -1,5 +1,5 @@
 ---
-title: "GEX Quality control: mouse_LUNG_healthy"
+title: "GEX Quality control"
 author: "Laura Jiménez Gracia"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -34,40 +34,37 @@ library(grid)
 Here we will define and load objects and functions that will be used throughout the document.
 ```{r}
 # Paths
+sub_folder <- "SCGTEST_32"
 path_project_metadata <- here::here("01_cellranger_mapping/data/FIXnCUT_metadata.csv")
-path_cellranger_data <- here::here(paste0("02_QC/1_downsampling_reads"))
+path_cellranger_data <- here::here(paste0("01_cellranger_mapping/subprojects/", sub_folder, "/jobs"))
 #path_scrublet_data <- here::here("02_QC/2_doublet_detection/results/tables")
-path_r_objects <- here::here("02_QC/results/R_objects")
+#path_r_objects <- here::here("02_QC/results/R_objects")
 
 # Functions
 source(here::here("bin/utils.R"))
 
 # Thresholds
-min_libsize <- 300
-max_libsize <- 50000
+min_libsize <- 500
+max_libsize <- 30000
 
-min_ngenes <- 150
-max_ngenes <- 7500
+min_ngenes <- 250
+max_ngenes <- 6000
 
-max_pctmt <- 25
+max_pctmt <- 15
 
 min_cells <- 8
 ```
 
 
 ## Load data
-The data used in this Rmarkdown document comes from **SCGTEST_33** dataset, filtered matrices were processed with `cellranger v6.1.1`, and the doublet predictions were obtained using `scrublet`.
+The data used in this Rmarkdown document comes from **SCGTEST_32** dataset, filtered matrices were processed with `cellranger v6.1.1`, and the doublet predictions were obtained using `scrublet`.
 ```{r}
 # Load all metadata information
 metadata <- read.csv(path_project_metadata)
 
-subproject_folder <- "SCGTEST_33"
-subproject_folder_n <- "SCGTEST33"
-tissue <- "LUNG"
-
 # Merging metadata_all tables
 metadata <- metadata %>% 
-  filter(subproject == subproject_folder & tissue == tissue)
+  filter(subproject == "SCGTEST_32" & type == "cDNA")
 
 print("Libraries metadata")
 DT::datatable(metadata, options = list(scrollX = TRUE))
@@ -75,45 +72,34 @@ DT::datatable(metadata, options = list(scrollX = TRUE))
 
 
 ```{r}
-# Metadata
-aggr_csv_path <- paste0(path_cellranger_data, "/data/", subproject_folder_n, "_", tissue, "_aggr.csv")
-metadata_aggr <- read.csv(aggr_csv_path)
-
-for (index in rownames(metadata_aggr)) {
-  print(index)
-  lib_name <- metadata_aggr[index, ]$library_name
-  metadata_aggr[index, ]$gem_id <- metadata$gem_id[metadata$library_name == lib_name]
-}
+# Getting list of gem_ids
+gemid_list <- sort(unique(metadata$gem_id))
 
 # Create Seurat object
 ## Counts data
-filtered_matrix_path <- paste0(path_cellranger_data, "/", subproject_folder_n, "_", tissue, "/outs/count/filtered_feature_bc_matrix")
-expression_matrix <- Read10X(data.dir = filtered_matrix_path)
-seurat_obj <- CreateSeuratObject(counts = expression_matrix, project = tissue)
-
-# Rename cellnames / columns
-gem_id_list <- purrr::map(colnames(seurat_obj), function(colname){
-  x <- str_split(colname, "-")[[1]]
-  gem_id <- metadata_aggr[x[2], ]$sample_id
-  gem_id
-  })
-gem_id_list <- unlist(gem_id_list)
-seurat_obj <- RenameCells(seurat_obj, add.cell.id = gem_id_list)
-head(colnames(seurat_obj))
-
-# Add orig.init and gem_id metadata
-seurat_obj$orig.ident <- gem_id_list
-seurat_obj$gem_id <- gem_id_list
+seurat_obj_list <- purrr::map(gemid_list, function(gem_id) {
+  filtered_matrix_path <- paste(path_cellranger_data, gem_id, gem_id, 
+                                    "outs/per_sample_outs", gem_id, "count/sample_feature_bc_matrix", sep = "/")
+  expression_matrix <- Read10X(data.dir = filtered_matrix_path)
+  seurat = CreateSeuratObject(counts = expression_matrix, project = gem_id)
+  # Add gem_id to each barcode (cell)
+  seurat$gem_id <- as.factor(gem_id)
+  seurat
+})
+names(seurat_obj_list) <- gemid_list
 ```
 
 
+## Merge seurat objects
 ```{r}
-seurat_obj <- RenameCells(seurat_obj,
-                          new.names = str_replace(colnames(seurat_obj), pattern = regex("-[0-9]"), replacement = "-1"))
-head(colnames(seurat_obj))
-tail(colnames(seurat_obj))
-```
+# Merge Seurat objects
+seurat_obj <- merge(x = seurat_obj_list[[1]],
+                    y = seurat_obj_list[2:length(seurat_obj_list)],
+                    add.cell.ids = gemid_list)
 
+# Remove Seurat object list
+rm(seurat_obj_list)
+```
 
 ## Add library metadata
 Now, we will add metadata_all information of the different samples.
@@ -125,63 +111,22 @@ seurat_obj_metadata <- left_join(seurat_obj@meta.data, metadata, by = "gem_id")
 seurat_obj$library_name <- as.factor(seurat_obj_metadata$library_name)
 seurat_obj$donor_id <- as.factor(seurat_obj_metadata$organism)
 seurat_obj$tissue <- as.factor(seurat_obj_metadata$tissue)
-seurat_obj$disease <- as.factor(seurat_obj_metadata$disease)
+seurat_obj$condition <- as.factor(seurat_obj_metadata$condition)
 seurat_obj$sample_protocol <- as.factor(seurat_obj_metadata$sample_protocol)
 ```
 
-
-## Add scrublet prediction
+## Save merged data
 ```{r}
-seurat_obj_list <- SplitObject(seurat_obj, split.by = "gem_id")
-
-# Add doublet predictions
-gem_ids <- unique(gem_id_list)
-scrublet_files_list <- purrr::map(unique(gem_ids), function(gem_id) {
-  path_scrublet <- here::here(paste0(
-  "02_QC/0_doublet_detection/results/", subproject_folder, "__", gem_id, "_doublet_prediction_scrublet.csv"))
-}
-)
-
-scrublet_dfs <- lapply(scrublet_files_list, function(scrublet_file_path){
-  read.csv(scrublet_file_path)
-})
-names(scrublet_dfs) <- gem_ids
-
-# Rename barcodes with gem_id
-for (gem_id in names(scrublet_dfs)) {
-  scrublet_dfs[[gem_id]]$barcodes <- paste0(gem_id, "_", scrublet_dfs[[gem_id]]$barcodes)
-}
-
-# Integrate scrublet doublet predictions to seurat metadata
-seurat_obj_list <- purrr::map2(seurat_obj_list, 
-                                          names(seurat_obj_list), 
-                                          function(seurat, gem_id) {
-                                            
-  if (all(colnames(seurat) == scrublet_dfs[[gem_id]]$barcodes)) {
-    seurat$scrublet_doublet_scores <- scrublet_dfs[[gem_id]]$scrublet_doublet_scores
-    seurat$scrublet_predicted_doublet <- scrublet_dfs[[gem_id]]$scrublet_predicted_doublet
-    seurat
-  } 
-})
-
-seurat_obj_list
+# Save Merged Seurat object
+#saveRDS(seurat_obj, str_c(path_r_objects, "/scgtest32_merged.rds"))
+#seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest32_merged.rds"))
 ```
-
-## Merge Seurat list
-```{r}
-seurat_obj <- merge(seurat_obj_list[[1]], 
-                    y = seurat_obj_list[2:length(seurat_obj_list)])
-
-# Remove Seurat object list
-rm(seurat_obj_list)
-```
-
-
 
 # GEX quality control
 First, we want to have an idea about the libraries quality. For this reason, we will plot the main QC variables and check how they distribute across libraries. This will help us interpret the results downstream, as we will know which are the libraries with lower quality.
 
 It is important to keep in mind that every library contains cells from a single mice, and we have two replicates for each condition.
+
 ```{r fig.width=14, fig.height=10}
 # Plot library complexity
 gg_libsize <- seurat_obj@meta.data %>%
@@ -193,8 +138,7 @@ gg_libsize <- seurat_obj@meta.data %>%
     title = "Library size",
     ylab = "Total UMIs",
     decreasing = TRUE
-  ) + scale_y_log10() +
-  theme(legend.position = "none")
+  ) + scale_y_log10()
 
 # Plot library complexity
 gg_libcomplex <- seurat_obj@meta.data %>%
@@ -206,8 +150,7 @@ gg_libcomplex <- seurat_obj@meta.data %>%
     title = "Library complexity",
     ylab = "Number of Detected Genes",
     decreasing = TRUE
-  ) + scale_y_log10() +
-  theme(legend.position = "none")
+  ) + scale_y_log10()
 
 # Calculate percentage mitocondrial genes
 seurat_obj$pct_mt <- PercentageFeatureSet(
@@ -225,8 +168,7 @@ gg_mt <- seurat_obj@meta.data %>%
     title = "Mitochondrial Expression",
     ylab = "Fraction of Mitochondrial Genes (%)",
     decreasing = TRUE
-  ) +
-  theme(legend.position = "none")
+  )
 
 # Calculate percentage ribosomal genes
 seurat_obj$pct_rb <- PercentageFeatureSet(
@@ -243,19 +185,12 @@ gg_rb <- seurat_obj@meta.data %>%
     title = "Ribosomal Expression",
     ylab = "Fraction of Ribosomal Genes (%)",
     decreasing = TRUE
-  ) +
-  theme(legend.position = "none")
+  )
 
 
 cowplot::plot_grid(gg_libsize, gg_libcomplex, gg_mt, gg_rb, ncol = 2)
 ```
 
-## Save merged data
-```{r}
-# Save Merged Seurat object
-saveRDS(seurat_obj, str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_merged.rds"))
-#seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_merged.rds"))
-```
 
 
 # Cell QC
@@ -266,9 +201,9 @@ At this point, and before analyzing gene expression data, we must ensure that we
 Finally, we would also explore the fraction of counts from ribosomal genes, but no filtering would be applied to them.
 
 ## Library size
-```{r fig.height=5, fig.width=14}
+```{r fig.height=6, fig.width=14}
 ggdens_libsize <- seurat_obj@meta.data %>%
-  ggplot(aes(x = nCount_RNA, fill = sample_protocol, color = sample_protocol)) +
+  ggplot(aes(x = nCount_RNA, fill = tissue, color = tissue)) +
     geom_density(alpha = 0.2) + 
     scale_x_log10() +
     labs(x = "Library Size (Total UMI)",
@@ -279,7 +214,8 @@ ggdens_libsize <- seurat_obj@meta.data %>%
     theme(axis.title = element_text(size = 12),
           axis.text = element_text(size = 10),
           legend.position = "bottom") +
-    guides(color = FALSE, fill = guide_legend(title = "Condition", ncol=3))
+    guides(color = FALSE, fill = guide_legend(title = "Condition")) +
+  facet_grid(sample_protocol ~ ., scales = "free")
 
 gghist_libsize <- seurat_obj@meta.data %>%
   ggplot(aes(nCount_RNA)) +
@@ -288,7 +224,8 @@ gghist_libsize <- seurat_obj@meta.data %>%
          y = "Frequency") +
     theme_pubr() +
     geom_vline(xintercept = min_libsize, linetype = "dashed", color = "red") +
-    geom_vline(xintercept = max_libsize, linetype = "dashed", color = "red")
+    geom_vline(xintercept = max_libsize, linetype = "dashed", color = "red") +
+  facet_grid(sample_protocol ~ ., scales = "free")
 
 cowplot::plot_grid(ggdens_libsize, gghist_libsize, ncol = 2)
 ```
@@ -296,9 +233,9 @@ cowplot::plot_grid(ggdens_libsize, gghist_libsize, ncol = 2)
 The count depth (UMIs per cell) should generally be above 500 when 3' gene expression technologies are applied, that is the low end of what we expect. However, for the 5' gene expression experiments we expected to get lower quality results, this means fewer number of UMIs per cell.
 
 ## Library complexity
-```{r fig.height=5, fig.width=14}
+```{r fig.height=6, fig.width=14}
 ggdens_ngenes <- seurat_obj@meta.data %>%
-  ggplot(aes(x = nFeature_RNA, fill = sample_protocol, color = sample_protocol)) +
+  ggplot(aes(x = nFeature_RNA, fill = tissue, color = tissue)) +
     geom_density(alpha = 0.2) + 
     scale_x_log10() +
     labs(x = "Library complexity (Number of Detected Genes)",
@@ -309,7 +246,8 @@ ggdens_ngenes <- seurat_obj@meta.data %>%
     theme(axis.title = element_text(size = 12),
           axis.text = element_text(size = 10),
           legend.position = "bottom") +
-    guides(color = FALSE, fill = guide_legend(title = "Condition"))
+    guides(color = FALSE, fill = guide_legend(title = "Condition")) +
+  facet_grid(sample_protocol ~ ., scales = "free")
 
 
 gghist_ngenes <- seurat_obj@meta.data %>%
@@ -319,7 +257,8 @@ gghist_ngenes <- seurat_obj@meta.data %>%
          y = "Frequency") +
     theme_pubr() +
     geom_vline(xintercept = min_ngenes, linetype = "dashed", color = "red") +
-    geom_vline(xintercept = max_ngenes, linetype = "dashed", color = "red")
+    geom_vline(xintercept = max_ngenes, linetype = "dashed", color = "red") +
+  facet_grid(sample_protocol ~ ., scales = "free")
 
 cowplot::plot_grid(ggdens_ngenes, gghist_ngenes, ncol = 2)
 ```
@@ -328,19 +267,19 @@ Ideally, the density distribution of high-quality data should contain a single l
 
 
 ## Fraction of mitochondrial expression
-```{r fig.height=5, fig.width=14}
+```{r fig.height=6, fig.width=14}
 ggdens_pctmt <- seurat_obj@meta.data %>%
-  ggplot(aes(x = pct_mt, fill = sample_protocol, color = sample_protocol)) +
+  ggplot(aes(x = pct_mt, fill = tissue, color = tissue)) +
     geom_density(alpha = 0.2) + 
     labs(x = "% Mitochondrial Expression",
          y = "Density") +
     theme_pubr() +
-    scale_x_continuous(limits = c(0, 50)) +
     geom_vline(xintercept = max_pctmt, linetype = "dashed", color = "red") +
     theme(axis.title = element_text(size = 12),
           axis.text = element_text(size = 10),
           legend.position = "bottom") +
-    guides(color = FALSE, fill = guide_legend(title = "Condition"))
+    guides(color = FALSE, fill = guide_legend(title = "Condition")) +
+  facet_grid(sample_protocol ~ ., scales = "free")
 
 
 gghist_pctmt <- seurat_obj@meta.data %>%
@@ -350,7 +289,8 @@ gghist_pctmt <- seurat_obj@meta.data %>%
     labs(x = "% Mitochondrial Expression",
          y = "Frequency") +
     theme_pubr() +
-    geom_vline(xintercept = max_pctmt, linetype = "dashed", color = "red")
+    geom_vline(xintercept = max_pctmt, linetype = "dashed", color = "red")  +
+  facet_grid(sample_protocol ~ ., scales = "free")
 
 cowplot::plot_grid(ggdens_pctmt, gghist_pctmt, ncol = 2)
 ```
@@ -358,9 +298,9 @@ cowplot::plot_grid(ggdens_pctmt, gghist_pctmt, ncol = 2)
 High mitochondrial read fractions could be indicative of damaged/dying cells whose cytoplasmic mRNA has leaked out through a broken membrane, and thus, only mRNA located in the mitochondria is still conserved.
 
 ## Fraction of ribosomal expression
-```{r fig.height=5, fig.width=14}
+```{r fig.height=6, fig.width=14}
 ggdens_pctrb <- seurat_obj@meta.data %>%
-  ggplot(aes(x = pct_rb, fill = sample_protocol, color = sample_protocol)) +
+  ggplot(aes(x = pct_rb, fill = tissue, color = tissue)) +
     geom_density(alpha = 0.2) + 
     labs(x = "% Ribosomal Expression",
          y = "Density") +
@@ -368,7 +308,8 @@ ggdens_pctrb <- seurat_obj@meta.data %>%
     theme(axis.title = element_text(size = 12),
           axis.text = element_text(size = 10),
           legend.position = "bottom") +
-    guides(color = FALSE, fill = guide_legend(title = "Condition"))
+    guides(color = FALSE, fill = guide_legend(title = "Condition")) +
+  facet_grid(sample_protocol ~ ., scales = "free")
 
 gghist_pctrb <- seurat_obj@meta.data %>%
   ggplot(aes(pct_rb)) +
@@ -376,41 +317,14 @@ gghist_pctrb <- seurat_obj@meta.data %>%
     scale_x_continuous(limits = c(0, 100)) +
     labs(x = "% Ribosomal Expression",
          y = "Frequency") +
-    theme_pubr()
+    theme_pubr() +
+  facet_grid(sample_protocol ~ ., scales = "free")
 
 cowplot::plot_grid(ggdens_pctrb, gghist_pctrb, ncol = 2)
 ```
 
-
-## Multiplets
-```{r fig.width=14, fig.height=5}
-VlnPlot(seurat_obj,
-        features = c("nCount_RNA", "nFeature_RNA", "scrublet_doublet_scores"),
-        split.by = "scrublet_predicted_doublet",
-        group.by = "sample_protocol")
-```
-
-
-```{r fig.width=12, fig.height=6}
-gg_cell_num <- dittoSeq::dittoBarPlot(seurat_obj, 
-                            "scrublet_predicted_doublet",
-                            group.by = "library_name",
-                            scale = "count",
-                            retain.factor.levels = TRUE,
-                            legend.show = FALSE)
-
-gg_cell_prop <- dittoSeq::dittoBarPlot(seurat_obj, 
-                             "scrublet_predicted_doublet",
-                             group.by = "library_name",
-                             scale = "percent",
-                            retain.factor.levels = TRUE)
-
-gg_cell_num + gg_cell_prop
-```
-
-
-
 ## Joint QC metrics
+
 After examining the previous results, we can see that the distribution of the three QC covariates is really similar among different libraries. For this reason, we will determine common QC thresholds for all of them.
 
 It is important not to consider the QC covariates independently as this can lead to the misinterpretation of results (e.g. cells with low counts could correspond to quiescent cells, whereas cells with high counts may be bigger, metabolically active cells might also have higher mitochondrial expression). For this reason, we will jointly explore how these three variables covary in order to set univariate thresholds.
@@ -625,8 +539,8 @@ seurat_obj
 # Save filtered data
 ```{r}
 # Save Merged Seurat object
-saveRDS(seurat_obj, str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_filtered.rds"))
-#seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_filtered.rds"))
+#saveRDS(seurat_obj, str_c(path_r_objects, "/scgtest32_filtered.rds"))
+#seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest32_filtered.rds"))
 ```
 
 

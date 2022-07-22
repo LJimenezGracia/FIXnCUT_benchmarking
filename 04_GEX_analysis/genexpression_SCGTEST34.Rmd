@@ -54,30 +54,26 @@ names(color_palette) <- NULL
 ```
 
 ## Load data
-The data used in this Rmarkdown document comes from **SCGTEST_33** dataset.
+The data used in this Rmarkdown document comes from **SCGTEST_34** dataset.
 ```{r}
 # Load all metadata information
 metadata <- read.csv(path_project_metadata)
 
 # Merging metadata tables
 metadata <- metadata %>% 
-  filter(subproject == "SCGTEST_33" & tissue == "Lung")
+  filter(subproject == "SCGTEST_34" & tissue == "PBMC")
 
 print("Libraries/Samples metadata")
 DT::datatable(metadata, options = list(scrollX = TRUE))
 
 # Load Seurat object
-seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest33_m_LUNG_healthy_cells1_clustering_annotation.rds"))
+seurat_obj <- readRDS(str_c(path_r_objects, "/scgtest34_h_PBMC_healthy_cells1_clustering_annotation.rds"))
 seurat_obj
 ```
 
 ```{r}
-# Reorder factor
-seurat_obj$sample_protocol <- factor(x = seurat_obj$sample_protocol,
-                                    levels = c("Fresh", "Fix&Cut_24h", "Fix&Cut_7d", "Cryopreservation", "Fix&Cut+Cryopreservation"))
-
 # Remove doublets
-seurat_obj <- seurat_obj[, seurat_obj$celltypes_1 != "Dobulets APC-B cells"]
+seurat_obj <- seurat_obj[, seurat_obj$celltypes_1 != "Low quality cells"]
 ```
 
 ## Cell proportions
@@ -102,11 +98,11 @@ gg_cell_num + gg_cell_prop
 
 # Explore gene expression
 ```{r}
-genes <- c("Actb", # housekeeping gene
-           "Epcam", # heterogeneous epithelial cells
-           "Ptprc", # Immune cells
-           "Pecam1", # Endothelial cells
-           "Pdgfrb" # Fibroblasts/Perivascular cells
+genes <- c("ACTB", # housekeeping gene
+           "EPCAM", # heterogeneous epithelial cells
+           "PTPRC", # Immune cells
+           "PECAM1", # Endothelial cells
+           "PDGFRB" # Fibroblasts/Perivascular cells
            )
 ```
 
@@ -115,7 +111,7 @@ genes <- c("Actb", # housekeeping gene
 ```{r fig.width=25, fig.height=6}
 gg1 <- VlnPlot(
   seurat_obj,
-  features = c("Actb", "Ptprc", "Pecam1"),
+  features = c("ACTB", "EPCAM", "PECAM1"),
   group.by = "sample_protocol",
   cols = color_palette, 
   pt.size = 0, 
@@ -123,13 +119,13 @@ gg1 <- VlnPlot(
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
                  width=0.25, position = position_dodge(width = .25)) &
       ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
-                                 label = "p.signif", label.y.npc = 0.95) & # p.format)
+                                 label = "p.format", label.y.npc = 0.95) & # p.format)
   ylim(0, 7) &
   scale_fill_brewer(palette = "Set2")
 
 gg2 <- VlnPlot(
   seurat_obj,
-  features = c("Epcam", "Pdgfrb"),
+  features = c("EPCAM", "PDGFRB"),
   group.by = "sample_protocol",
   cols = color_palette, 
   pt.size = 0.1, 
@@ -137,14 +133,14 @@ gg2 <- VlnPlot(
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
                  width=0.25, position = position_dodge(width = .25)) & 
         ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
-                                 label = "p.signif", label.y.npc = 0.95) & # p.format)
+                                 label = "p.format", label.y.npc = 0.95) & # p.format)
   ylim(0, 7) &
   scale_fill_brewer(palette = "Set2")
 
 cowplot::plot_grid(plotlist = list(gg1, gg2), ncol = 2, rel_widths = c(1.5, 1))
 ```
 
-```{r fig.width=25, fig.height=20}
+```{r fig.width=10, fig.height=20}
 FeaturePlot(seurat_obj,
             features = genes,
             split.by = "sample_protocol",
@@ -156,7 +152,7 @@ FeaturePlot(seurat_obj,
 
 ## Low quality genes
 ```{r}
-lowquality_genes <- c("Hbb-bs", "Hba-a1", "Hba-a2", "Hbb-bt")
+lowquality_genes <- c("HBB", "HBA1", "HBA2")
 ```
 
 ```{r fig.width=20, fig.height=6}
@@ -173,9 +169,23 @@ VlnPlot(seurat_obj,
   scale_fill_brewer(palette = "Set2")
 ```
 
-```{r fig.width=25, fig.height=12}
+```{r fig.width=20, fig.height=6}
+VlnPlot(seurat_obj,
+        features = lowquality_genes,
+        group.by = "celltypes_1",
+        split.by = "sample_protocol", 
+        ncol = 4)  &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
+                 width=0.25, position = position_dodge(width = .25)) &
+      ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
+                                 label = "p.signif", label.y.npc = 0.95) & # p.format)
+  ylim(0, 9) &
+  scale_fill_brewer(palette = "Set2")
+```
+
+```{r fig.width=10, fig.height=12}
 FeaturePlot(seurat_obj,
-            features = c("Hbb-bs", "Hba-a1", "Hba-a2"),
+            features = c("HBB", "HBA1", "HBA2"),
             split.by = "sample_protocol",
             pt.size = 0.25,
             order = T,
@@ -201,7 +211,7 @@ VlnPlot(seurat_obj,
 VlnPlot(seurat_obj,
         features = lowquality_genes,
         group.by = "sample_protocol",
-        idents = "Pneumocytes Type II",
+        idents = "Pneumocyt es Type II",
         pt.size = 0.1, 
         ncol = 4) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
@@ -214,14 +224,14 @@ VlnPlot(seurat_obj,
 
 # Massoni et al. gene signatures
 ```{r}
-TOP_UPgenes <- c("Nfkbia", "Eif1", "Jund", "Jun", "Ubc", "Jundb", "Tnfaip3", "Cdc42", "Id3", "Fosb", "Ppp1r15a",
-                          "Lefprot1", "Calr", "Hspa1a", "Hspa1b", "Hspa8", "Trac", "Stx7", "Sit1", "Sec62")
+TOP_UPgenes <- c("NFKBIA", "EIF1", "JUND", "JUN", "UBC", "JUNDB", "TNFAIP3", "CDC42", "ID3", "FOSB", "PPP1R15A",
+                          "LEFPROT1", "CALR", "HSPA1A", "HSPA1B", "HSPA8", "TRAC", "STX7", "SIT1", "SEC62")
 ```
 
 ```{r fig.width=20, fig.height=20}
 VlnPlot(
   seurat_obj,
-  features = c("Actb", TOP_UPgenes),
+  features = c("ACTB", TOP_UPgenes),
   group.by = "sample_protocol",
   cols = color_palette, 
   pt.size = 0, 
@@ -231,39 +241,21 @@ VlnPlot(
   scale_fill_brewer(palette = "Set2")
 ```
 
-```{r fig.width=40, fig.height=30}
-# Removing doublets
-seurat_obj <- subset(seurat_obj, 
-                     celltypes_1 != "Dobulets APC-B cells")
-
-VlnPlot(
-  seurat_obj,
-  features = c("Actb", TOP_UPgenes),
-  group.by = "celltypes_1",
-  split.by = "sample_protocol",
-  #cols = color_palette, 
-  pt.size = 0, 
-  ncol = 4) &
-  scale_fill_brewer(palette = "Set2")
-```
-
-
 ```{r fig.width=17, fig.height=5}
 DotPlot(seurat_obj,
-        features = c("Actb", TOP_UPgenes),
+        features = c("ACTB", TOP_UPgenes),
         group.by = "sample_protocol",
         dot.scale = 10,
         )
 ```
 
 
-
 ```{r fig.width=8, fig.height=5}
 # Gene signature associated to collagenase treatment in mouse satellite cells
 
-vandenBrink_signature <- c("Cebpb", "Id3", "Jund", "Hspb1", "Dusp1", "Dnajb1", "Fos", "Hspa8",
-                           "Atf3", "Mt1m", "Hsp90ab1", "Junb", "Hsph1", "Jun", "Hspa1a", "Hspa1b", "Nfkbia",
-                           "Egr1", "Fosb", "Cebpd", "Socs3", "Nr4a1", "Ubc", "Zfp36", "Ppp1r15a", "Btg2", "Ier2")
+vandenBrink_signature <- c("CEBPB", "ID3", "JUND", "HSPB1", "DUSP1", "DNAJB1", "FOS", "HSPA8",
+                           "ATF3", "MT1M", "HSP90AB1", "JUNB", "HSPH1", "JUN", "HSPA1A", "HSPA1B", "NFKBIA",
+                           "EGR1", "FOSB", "CEBPD", "SOCS3", "NR4A1", "UBC", "ZFP36", "PPP1R15A", "BTG2", "IER2")
 
 seurat_obj <- AddModuleScore(
     seurat_obj,
@@ -278,7 +270,7 @@ VlnPlot(
   cols = color_palette, 
   pt.size = 0,
   ncol = 1) &
-  ylim(0, 3) &
+  ylim(0, 1.5) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
                  width=0.25, position = position_dodge(width = .25)) &
   ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
@@ -286,30 +278,12 @@ VlnPlot(
   scale_fill_brewer(palette = "Set2")
 ```
 
-
-```{r fig.width=40, fig.height=30}
-# Removing doublets
-seurat_obj <- subset(seurat_obj, 
-                     celltypes_1 != "Dobulets APC-B cells")
-
-VlnPlot(
-  seurat_obj,
-  features = c("Actb", vandenBrink_signature),
-  group.by = "celltypes_1",
-  split.by = "sample_protocol",
-  #cols = color_palette, 
-  pt.size = 0, 
-  ncol = 4) &
-  scale_fill_brewer(palette = "Set2")
-```
-
-
 ```{r fig.width=8, fig.height=5}
 # Gene signature associated to storage time in PBMC (measured by microarrays)
 
-Baechler_signature <- c("Id1", "Cdc42", "Phlda2", "Nr4a2", "Jun", "Mir22hg", "Nr4a2", "Mica", "Adm", 
-                        "Fosb", "Cd83", "Klf10", "Dusp2", "Ppp1r15a", "Ctrl", "Nfil3", "Nfkbia", "Plk2", "Ptx3",
-                        "Gadd45b", "Vegfa", "Arl4a", "Cdkn1a", "Junb", "Tnfaip3", "Eif1")
+Baechler_signature <- c("ID1", "CDC42", "PHLDA2", "NR4A2", "JUN", "MIR22HG", "NR4A2", "MICA", "ADM", 
+                        "FOSB", "CD83", "KLF10", "DUSP2", "PPP1R15A", "CTRL", "NFIL3", "NFKBIA", "PLK2", "PTX3",
+                        "GADD45B", "VEGFA", "ARL4A", "CDKN1A", "JUNB", "TNFAIP3", "EIF1")
 
 seurat_obj <- AddModuleScore(
     seurat_obj,
@@ -324,7 +298,7 @@ VlnPlot(
   cols = color_palette, 
   pt.size = 0,
   ncol = 1) &
-  ylim(0, 1.5) &
+  ylim(0, 1) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
                  width=0.25, position = position_dodge(width = .25)) &
   ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
@@ -335,11 +309,11 @@ VlnPlot(
 ```{r fig.width=8, fig.height=5}
 # Gene signature associated to storage time in PBMC (measured by scRNA-seq)
 
-PBMC_Massoni_signature <- c("Fth1", "Eif1", "Crem", "H3f3b", "Leprotl1", "Gabarapl1", "Arid5a",
-                            "Hmgb2", "Selk", "Cirbp", "Cnot1", "Cxcr4", "Znf331", "Rnf145", "Nfkbia",
-                            "Cib1", "Syap1", "Chd1", "Pik3r1", "Fam177a1", "G0s2", "Neat1", "Fam133b",
-                            "Sbds", "Jund", "Stat4", "Kmt2e", "Eif1b", "Tspyl2", "Tnfaip3", "Mgat4a",
-                            "Sytl3", "Ifngr1", "Spock2", "Ezr", "Cd44")
+PBMC_Massoni_signature <- c("FTH1", "EIF1", "CREM", "H3F3B", "LEPROTL1", "GABARAPL1", "ARID5A",
+                            "HMGB2", "SELK", "CIRBP", "CNOT1", "CXCR4", "ZNF331", "RNF145", "NFKBIA",
+                            "CIB1", "SYAP1", "CHD1", "PIK3R1", "FAM177A1", "G0S2", "NEAT1", "FAM133B",
+                            "SBDS", "JUND", "STAT4", "KMT2E", "EIF1B", "TSPYL2", "TNFAIP3", "MGAT4A",
+                            "SYTL3", "IFNGR1", "SPOCK2", "EZR", "CD44")
 
 seurat_obj <- AddModuleScore(
     seurat_obj,
@@ -354,7 +328,7 @@ VlnPlot(
   cols = color_palette, 
   pt.size = 0,
   ncol = 1) &
-  ylim(0, 1.25) &
+  ylim(0, 0.75) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
                  width=0.25, position = position_dodge(width = .25)) &
   ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
@@ -364,10 +338,10 @@ VlnPlot(
 
 # Cell-type signatures
 ```{r}
-housekeeping_signature <- c("Actb", "B2m",  "Gusb", "Hmbs", "Rpl13a", "Sdha")
-Bcell_signature <- c("Cd79a", "Cd79b", "Ms4a1", "Cd19", "Cd74", "Ly6d", "Ighm", "Igkc")
-Tcell_signature <- c("Cd3d", "Cd3e", "Cd4", "Cd8a", "Nkg7", "Irf7")
-Myeloid_signature <- c("S100a4", "Cd14", "Lyz2", "Ccr2", "Ly6c2", "Plac8")
+housekeeping_signature <- c("ACTB", "B2M",  "GUSB", "HMBS", "RPL13A", "SDHA")
+Bcell_signature <- c("CD79A", "CD79B", "MS4A1", "CD19", "CD74", "LY6D", "IGHM", "IGKC")
+Tcell_signature <- c("CD3D", "CD3E", "CD4", "CD8A", "NKG7", "IRF7")
+Myeloid_signature <- c("S100A4", "CD14", "LYZ", "CCR2", "PLAC8")
 
 signature_list <- list(housekeeping_signature, Bcell_signature, Tcell_signature, Myeloid_signature)
 names(signature_list) <- c("housekeeping_signature", "Bcell_signature", "Tcell_signature", "Myeloid_signature")
@@ -403,7 +377,7 @@ VlnPlot(
   cols = color_palette, 
   pt.size = 0,
   ncol = 1) &
-  ylim(0, 5) &
+  ylim(0, 4) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
                  width=0.25, position = position_dodge(width = .25)) &
   ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
@@ -414,7 +388,23 @@ VlnPlot(
 VlnPlot(
   seurat_obj,
   features = "Tcell_signature3",
-  idents = c("T cells"),
+  idents = c("CD8+ T cells", "CM CD4+ T cells 1", "CM CD4+ T cells 2", "Cytotoxic CD8+ T cells", 
+             "Naive CD4+ T cells", "Naive CD8+ T cells"),
+  group.by = "sample_protocol",
+  cols = color_palette, 
+  pt.size = 0,
+  ncol = 1) &
+  ylim(0, 2) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
+                 width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
+                                 label = "p.format", label.y.npc = 0.95) &
+  scale_fill_brewer(palette = "Set2")
+
+VlnPlot(
+  seurat_obj,
+  features = "Myeloid_signature4",
+  idents = c("CD14+ Monocytes", "DC2", "DC4"),
   group.by = "sample_protocol",
   cols = color_palette, 
   pt.size = 0,
@@ -425,29 +415,11 @@ VlnPlot(
   ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
                                  label = "p.format", label.y.npc = 0.95) &
   scale_fill_brewer(palette = "Set2")
-
-VlnPlot(
-  seurat_obj,
-  features = "Myeloid_signature4",
-  idents = "Monocytes/Macrophages/DCs",
-  group.by = "sample_protocol",
-  cols = color_palette, 
-  pt.size = 0,
-  ncol = 1) &
-  ylim(0, 4) &
-  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median, geom='crossbar', colour = "black",
-                 width=0.25, position = position_dodge(width = .25)) &
-  ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
-                                 label = "p.format", label.y.npc = 0.95) &
-  scale_fill_brewer(palette = "Set2")
 ```
+
+
 ## RidgePlot
 ```{r fig.width=10, fig.height=6}
-seurat_obj$sample_protocol <- factor(
-  x = seurat_obj$sample_protocol,
-  levels=c("Fresh", "Fix&Cut_24h", "Cryopreservation", "Fix&Cut+Cryopreservation", "Fix&Cut_7d")
-  )
-
 RidgePlot(seurat_obj,
           features = "housekeeping_signature1",
   group.by = "sample_protocol")
@@ -459,12 +431,13 @@ RidgePlot(seurat_obj,
 
 RidgePlot(seurat_obj,
           features = "Tcell_signature3",
-  idents = c("T cells"),
+  idents = c("CD8+ T cells", "CM CD4+ T cells 1", "CM CD4+ T cells 2", "Cytotoxic CD8+ T cells", 
+             "Naive CD4+ T cells", "Naive CD8+ T cells"),
   group.by = "sample_protocol")
 
 RidgePlot(seurat_obj,
           features = "Myeloid_signature4",
-  idents = c("Monocytes/Macrophages/DCs"),
+  idents = c("CD14+ Monocytes", "DC2", "DC4"),
   group.by = "sample_protocol")
 ```
 
