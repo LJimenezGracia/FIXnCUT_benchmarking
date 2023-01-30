@@ -16,7 +16,7 @@ path_r_objects <- here::here("03_clustering_annotation/results/R_objects")
 path_r_tables <- here::here("03_clustering_annotation/results/tables")
 
 ## Load Seurat object
-seurat_obj <- readRDS(paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_clustering_resolutions.rds"))
+seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_MouseColon_clustering_resolutions.rds"))
 seurat_obj
 
 
@@ -43,7 +43,7 @@ seurat_obj_markers %<>%
 # Save cell-type biomarkers
 ## Export in .rds object
 saveRDS(seurat_obj_markers, 
-        file = paste0(path_r_objects, "/biomarkers_scgtest33_m_LUNG_healthy_resolution0.1.rds"))
+        file = paste0(path_r_objects, "/biomarkers_FIXnCUT_MouseColon_resolution0.1.rds"))
 
 ## Export in .xlsx format
 ### Prepare data: sort and filter
@@ -57,4 +57,4 @@ biomarkers_list <- purrr::map(levels(biomarkers_df$cluster),
 names(biomarkers_list) <- levels(biomarkers_df$cluster)
 
 openxlsx::write.xlsx(biomarkers_list,
-                     file = paste0(path_r_tables, "/biomarkers_scgtest33_m_LUNG_healthy_resolution0.1.xlsx"))
+                     file = paste0(path_r_tables, "/biomarkers_FIXnCUT_MouseColon_resolution0.1.xlsx"))
