@@ -1,0 +1,668 @@
+---
+title: "Pseudobulk gene correlation"
+author: "Laura Jiménez Gracia"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# Introduction
+
+## Objective
+In this Rmarkdown document, we are going to
+
+https://hbctraining.github.io/scRNA-seq/lessons/pseudobulk_DESeq2_scrnaseq.html
+
+# Pre-processing
+## Libraries
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(Seurat)
+library(gt)
+
+library(edgeR)
+library(SingleCellExperiment)
+```
+
+## Parameters
+Here we will define and load objects and functions that will be used throughout the document.
+```{r}
+# Paths
+path_project_metadata <- here::here("01_cellranger_mapping/data/FIXnCUT_metadata.csv")
+path_r_objects <- here::here("03_clustering_annotation/results/R_objects")
+path_r_figs_out <- here::here("04_GEX_analysis/results/figs")
+
+# Functions
+source(here::here("bin/utils.R"))
+
+# Parameters
+confounder_variables <- c("library_name", "library_name", "fixation_time")
+confounder_names <- c("Library", "Sample Protocol", "Fixation time")
+
+metadata_variables_confounder <- c("nCount_RNA", "nFeature_RNA", "gem_id", 
+                                   "pct_mt", "pct_rb", "Phase",
+                                   "library_name", "library_name", "fixation_time")
+
+```
+
+## Load metadata
+The data used in this Rmarkdown document comes from **THREETR_27** dataset.
+```{r}
+# Load all metadata information
+metadata <- read.csv(path_project_metadata)
+
+# Merging metadata tables
+metadata <- metadata %>% 
+  filter(subproject == "THREETR_27" & tissue == "Colon")
+
+print("Libraries/Samples metadata")
+DT::datatable(metadata, options = list(scrollX = TRUE))
+```
+
+
+
+# Pseudo-bulk gene expression profiles & correlation
+
+```{r}
+# Load Seurat object
+seurat_obj <- readRDS(str_c(path_r_objects, "/FIXnCUT_HumanColon_filtered_clustering_annotation_cleaned.rds"))
+seurat_obj$celltypes <- factor(x = seurat_obj$celltypes,
+                                    levels = c("CD4+ T cells", "CD8+ T cells", "NK cells", "M0 macrophages", "M1 macrophages", 
+                                               "B cells", "B cells cycling", "Plasma cells", "Plasmablasts", "Mast cells",
+                                                "Colonocytes 1", "Colonocytes 2", "Colonocytes PLCG2+", "Intestinal BEST4+OTOP2+ cells",
+                                               "Transit-amplifying (TA) cells cycling", "Mature Goblet", "Tuft cells", 
+                                               "Endothelium", "Myofibroblasts", "Stromal cells", "Glia", "Cycling cells"))
+```
+
+
+```{r}
+# Extract raw counts and metadata to create SingleCellExperiment object
+counts <- seurat_obj@assays$RNA@counts 
+metadata <- seurat_obj@meta.data
+
+# Create single cell experiment object
+sce <- SingleCellExperiment(assays = list(counts = counts), 
+                           colData = metadata)
+```
+
+
+```{r}
+# Generate sample level metadata
+## Determine the number of cells per sample
+table(sce$library_name)
+
+## Turn named vector into a numeric vector of number of cells per sample
+n_cells <- as.numeric(table(sce$library_name))
+
+## Determine how to reorder the samples (rows) of the metadata to match the order of sample names in side vector
+m <- match(c("Fresh", "Fixed", "Cryopreserved", "Fixed+Cryopreserved"), sce$library_name)
+
+## Create the sample level metadata by combining the reordered metadata with the number of cells corresponding to each sample.
+ei <- data.frame(colData(sce)[m, ], 
+                  n_cells, row.names = NULL) %>% 
+                select(-"library_name")
+ei
+```
+
+
+```{r}
+# Prior to performing the aggregation of cells to the sample level, 
+# we want to make sure that the poor quality cells are removed if this step hasn’t already been performed.
+
+# Perform QC if not already performed
+# Calculate quality control (QC) metrics
+# Get cells w/ few/many detected genes
+# Remove outlier cells
+## Remove lowly expressed genes which have less than 10 cells with any counts
+```
+
+
+```{r}
+# Aggregate the counts per sample_id
+# Subset metadata to only include the cluster and sample IDs to aggregate across
+groups <- colData(sce)[, "library_name"]
+
+# Aggregate across cluster-sample groups
+pb <- Matrix.utils::aggregate.Matrix(t(counts(sce)), 
+                       groupings = groups, fun = "sum") 
+
+class(pb)
+dim(pb)
+pb[1:2, 1:5]
+```
+
+```{r}
+# Data scaling + log
+MM <- apply(t(pb), 2, function(x){
+      if(max(x) > 0){
+        x/max(x)
+      }else{
+        x
+      }
+    })
+
+# Scale the scaling factor
+MM <- 1e4 * MM
+
+# LogTransform
+MM <- log10(MM + 1)
+MM[1:8, 1:2]
+
+MM <- as.data.frame(MM)
+head(MM)
+```
+
+
+```{r}
+# Test for normality
+
+# Shapiro-Wilk normality
+#shapiro.test(MM$Fresh_1)
+#shapiro.test(MM$Fixed_1)
+
+# Visual QQ plot
+ggpubr::ggqqplot(MM$Fresh, ylab = "Fresh")
+ggpubr::ggqqplot(MM$Fixed, ylab = "Fixed")
+ggpubr::ggqqplot(MM$Cryopreserved, ylab = "Cryopreserved")
+ggpubr::ggqqplot(MM$`Fixed+Cryopreserved`, ylab = "Fixed+Cryopreserved")
+
+# Testing correlation
+#cor.test(MM$Fresh_1, MM$Fixed_1,  method = "pearson")
+```
+
+
+Correlation coefficients:
+* Pearson correlation test, the data should satisfy some conditions 
+1) Is the covariation linear? From the ggscatter, the relationship is linear. In the situation where the scatter plots show curved patterns, we are dealing with nonlinear association between the two variables. 
+2) Are the data from each of the 2 variables (x, y) follow a normal distribution? For this, we can apply Shapiro-Wilk test.
+* the Kendall rank correlation coefficient or Kendall’s tau statistic is used to estimate a rank-based measure of association
+* Spearman’s rho statistic is also used to estimate a rank-based measure of association. This test may be used if the data do not come from a bivariate normal distribution.
+
+
+```{r fig.width=10, fig.height=10}
+gg <- {
+  PerformanceAnalytics::chart.Correlation(MM, histogram=TRUE,  method="pearson", pch=19)
+  recordPlot() }
+
+ggsave(paste0(path_r_figs_out, "/HumanColon_Pseudobulk.png"),
+       width = 10, height = 10, plot = replayPlot(gg),
+       dpi = 300)
+```
+
+
+## By hallmark
+```{r}
+# Getting HALLMARK genes
+HALLMARK_APOPTOSIS <- msigdbr::msigdbr(species = "human", category = "H") %>%
+  filter(gs_name == "HALLMARK_APOPTOSIS")
+HALLMARK_APOPTOSIS <- HALLMARK_APOPTOSIS$gene_symbol
+
+HALLMARK_HYPOXIA <- msigdbr::msigdbr(species = "human", category = "H") %>%
+  filter(gs_name == "HALLMARK_HYPOXIA")
+HALLMARK_HYPOXIA <- HALLMARK_HYPOXIA$gene_symbol
+
+HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY <- msigdbr::msigdbr(species = "human", category = "H") %>%
+  filter(gs_name == "HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY")
+HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY <- HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY$gene_symbol
+
+HALLMARK_G2M_CHECKPOINT <- msigdbr::msigdbr(species = "human", category = "H") %>%
+  filter(gs_name == "HALLMARK_G2M_CHECKPOINT")
+HALLMARK_G2M_CHECKPOINT <- HALLMARK_G2M_CHECKPOINT$gene_symbol
+
+HALLMARK_UNFOLDED_PROTEIN_RESPONSE <- msigdbr::msigdbr(species = "human", category = "H") %>%
+  filter(gs_name == "HALLMARK_UNFOLDED_PROTEIN_RESPONSE")
+HALLMARK_UNFOLDED_PROTEIN_RESPONSE <- HALLMARK_UNFOLDED_PROTEIN_RESPONSE$gene_symbol
+
+HALLMARK_INFLAMMATORY_RESPONSE <- msigdbr::msigdbr(species = "human", category = "H") %>%
+  filter(gs_name == "HALLMARK_INFLAMMATORY_RESPONSE")
+HALLMARK_INFLAMMATORY_RESPONSE <- HALLMARK_INFLAMMATORY_RESPONSE$gene_symbol
+```
+
+```{r}
+head(MM)
+
+# Rename MM dataframe
+colnames(MM) <- c('Fresh', "Fixed", 'Cryo','Fixed+Cryo`')
+
+head(MM)
+```
+
+
+```{r fig.width=10, fig.height=10}
+# HALLMARK_APOPTOSIS
+MM_subset1 <- MM %>% 
+  filter(row.names(MM) %in% HALLMARK_APOPTOSIS)
+
+# Pearson correlation between 2 variables
+PerformanceAnalytics::chart.Correlation(MM_subset1, histogram=TRUE,  method="pearson", pch=19)
+
+# HALLMARK_HYPOXIA
+MM_subset2 <- MM %>% 
+  filter(row.names(MM) %in% HALLMARK_HYPOXIA)
+
+# Pearson correlation between 2 variables
+PerformanceAnalytics::chart.Correlation(MM_subset2, histogram=TRUE,  method="pearson", pch=19)
+
+
+# HALLMARK_REACTIVE_OXYGEN_SPECIES
+MM_subset3 <- MM %>% 
+  filter(row.names(MM) %in% HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY)
+
+# Pearson correlation between 2 variables
+PerformanceAnalytics::chart.Correlation(MM_subset3, histogram=TRUE,  method="pearson", pch=19)
+
+
+# HALLMARK_G2M_CHECKPOINT
+MM_subset4 <- MM %>% 
+  filter(row.names(MM) %in% HALLMARK_G2M_CHECKPOINT)
+
+# Pearson correlation between 2 variables
+PerformanceAnalytics::chart.Correlation(MM_subset4, histogram=TRUE,  method="pearson", pch=19)
+
+# HALLMARK_UNFOLDED_PROTEIN_RESPONSE
+MM_subset5 <- MM %>% 
+  filter(row.names(MM) %in% HALLMARK_UNFOLDED_PROTEIN_RESPONSE)
+
+PerformanceAnalytics::chart.Correlation(MM_subset5, histogram=TRUE,  method="pearson", pch=19)
+
+# HALLMARK_INFLAMMATORY_RESPONSE
+MM_subset6 <- MM %>% 
+  filter(row.names(MM) %in% HALLMARK_INFLAMMATORY_RESPONSE)
+PerformanceAnalytics::chart.Correlation(MM_subset5, histogram=TRUE,  method="pearson", pch=19)
+
+```
+
+
+
+#### Correlation plot
+```{r fig.width=10, fig.height=6}
+MM_correlation1 <- round(cor(MM_subset1, method = "pearson"), 2)
+pheatmap1 <- pheatmap::pheatmap(MM_correlation1, 
+                   display_numbers = FALSE, fontsize_number = 50, number_color = "grey",
+                   color = hcl.colors(40, "YlOrRd", rev = TRUE),
+                   breaks = seq(0.95, 1, length = 40),
+                   main = "Apoptosis"
+                   )
+
+
+MM_correlation2 <- round(cor(MM_subset2, method = "pearson"), 2)
+pheatmap2 <- pheatmap::pheatmap(MM_correlation2, 
+                   display_numbers = FALSE, fontsize_number = 50, number_color = "grey",
+                   color = hcl.colors(40, "YlOrRd", rev = TRUE),
+                   breaks = seq(0.95, 1, length = 40),
+                   main = "Hypoxia"
+                   )
+
+
+MM_correlation3 <- round(cor(MM_subset3, method = "pearson"), 2)
+pheatmap3 <- pheatmap::pheatmap(MM_correlation3, 
+                   display_numbers = FALSE, fontsize_number = 50, number_color = "grey",
+                   color = hcl.colors(40, "YlOrRd", rev = TRUE),
+                   breaks = seq(0.95, 1, length = 40),
+                   main = "ROS Pathway"
+                   )
+
+
+MM_correlation4 <- round(cor(MM_subset4, method = "pearson"), 2)
+pheatmap4 <- pheatmap::pheatmap(MM_correlation4, 
+                   display_numbers = FALSE, fontsize_number = 50, number_color = "grey",
+                   color = hcl.colors(40, "YlOrRd", rev = TRUE),
+                   breaks = seq(0.95, 1, length = 40),
+                   main = "G2/M Checkpoint"
+                   )
+
+
+MM_correlation5 <- round(cor(MM_subset5, method = "pearson"), 2)
+pheatmap5 <- pheatmap::pheatmap(MM_correlation5, 
+                   display_numbers = FALSE, fontsize_number = 50, number_color = "grey",
+                   color = hcl.colors(40, "YlOrRd", rev = TRUE),
+                   breaks = seq(0.95, 1, length = 40),
+                   main = "Unfolded Protein Response"
+                   )
+
+
+MM_correlation6 <- round(cor(MM_subset6, method = "pearson"), 2)
+pheatmap6 <- pheatmap::pheatmap(MM_correlation6, 
+                   display_numbers = FALSE, fontsize_number = 50, number_color = "grey",
+                   color = hcl.colors(40, "YlOrRd", rev = TRUE),
+                   breaks = seq(0.95, 1, length = 40),
+                   main = "Inflammaotory response"
+                   )
+
+g <- gridExtra::grid.arrange(grobs = list(pheatmap1[[4]], pheatmap2[[4]], pheatmap3[[4]],  pheatmap4[[4]], pheatmap5[[4]], pheatmap6[[4]]),
+             ncol =3)
+ggsave(paste0(path_r_figs_out, "/HumanColon_Pseudobulk_hallmarks.svg"),
+       width = 10, height = 6,
+       dpi = 300, plot = g)
+```
+
+
+# Pseudo-bulk gene expression profiles & correlation by cell-type
+```{r}
+# Print out the table of cells in each cluster-sample group
+table(seurat_obj$celltypes, seurat_obj$library_name)
+```
+
+
+```{r}
+# Extract raw counts and metadata to create SingleCellExperiment object
+counts <- seurat_obj@assays$RNA@counts 
+metadata <- seurat_obj@meta.data
+
+# Create single cell experiment object
+sce <- SingleCellExperiment(assays = list(counts = counts), 
+                           colData = metadata)
+```
+
+
+```{r}
+# Generate sample level metadata
+## Determine the number of cells per sample
+table(sce$library_name)
+
+## Turn named vector into a numeric vector of number of cells per sample
+n_cells <- as.numeric(table(sce$library_name))
+
+## Determine how to reoder the samples (rows) of the metadata to match the order of sample names in side vector
+m <- match(c("Fresh", "Fixed", "Cryopreserved", "Fixed+Cryopreserved"), sce$library_name)
+
+## Create the sample level metadata by combining the reordered metadata with the number of cells corresponding to each sample.
+ei <- data.frame(colData(sce)[m, ], 
+                  n_cells, row.names = NULL) %>% 
+                select(-"library_name")
+ei
+```
+
+
+```{r}
+# Prior to performing the aggregation of cells to the sample level, 
+# we want to make sure that the poor quality cells are removed if this step hasn’t already been performed.
+
+# Perform QC if not already performed
+# Calculate quality control (QC) metrics
+# Get cells w/ few/many detected genes
+# Remove outlier cells
+## Remove lowly expressed genes which have less than 10 cells with any counts
+```
+
+
+```{r}
+# Aggregate the counts per sample_id
+# Subset metadata to only include the cluster and sample IDs to aggregate across
+groups <- colData(sce)[, c("celltypes", "library_name")]
+
+# Aggregate across cluster-sample groups
+pb <- Matrix.utils::aggregate.Matrix(t(counts(sce)), 
+                       groupings = groups, fun = "sum") 
+
+class(pb)
+dim(pb)
+pb[1:5, 1:8]
+```
+
+
+```{r}
+# Not every cluster is present in all samples; create a vector that represents how to split samples
+splitf <- sapply(stringr::str_split(rownames(pb), pattern = "_",  n = 2), `[`, 1)
+head(splitf)
+```
+
+
+```{r}
+# Turn into a list and split the list into components for each cluster and transform, 
+# so rows are genes and columns are samples and make rownames as the sample IDs
+pb <- split.data.frame(pb, factor(splitf)) %>%
+        lapply(function(u) trqwe::set_colnames(t(u), stringr::str_extract(rownames(u), "_(.*)")))
+
+# Explore the different components of list
+#str(pb)
+```
+
+```{r}
+# Print out the table of cells in each cluster-sample group
+table(sce$celltypes, sce$library_name)
+```
+
+
+
+
+
+```{r fig.height=10, fig.width=10}
+list_gg_cells <- list()
+i <- 1
+
+for (cluster in levels(seurat_obj$celltypes)) {
+  
+  if (sum(seurat_obj$celltypes == cluster) > 100 &&
+      all(as.numeric(table(seurat_obj$library_name[seurat_obj$celltypes == cluster])) > 25) ) {
+    pb_sub <- t(pb[[cluster]])
+
+    # Data scaling + log
+    MM <- apply(t(pb_sub), 2, function(x){
+          if(max(x) > 0){
+            x/max(x)
+          }else{
+            x
+          }
+        })
+    
+    # Scale the scaling factor
+    MM <- 1e4 * MM
+    
+    # LogTransform
+    MM <- log10(MM + 1)
+
+    MM <- as.data.frame(MM)
+    head(MM)
+    
+    gg <- { PerformanceAnalytics::chart.Correlation(MM, histogram=TRUE,  method="pearson", pch=19) 
+      recordPlot() }
+    list_gg_cells[[i]] <- gg
+    i <- i+1
+  }
+}
+```
+
+
+
+## Downsampling by min # cells
+```{r}
+pseudobulk_cond <- function(seurat_obj) {
+  # Extract raw counts and metadata to create SingleCellExperiment object
+  counts <- seurat_obj@assays$RNA@counts 
+  metadata <- seurat_obj@meta.data
+  
+  # Create single cell experiment object
+  sce <- SingleCellExperiment(assays = list(counts = counts), colData = metadata)
+  
+  ## Turn named vector into a numeric vector of number of cells per sample
+  n_cells <- as.numeric(table(sce$library_name))
+  
+  ## Determine how to reoder the samples (rows) of the metadata to match the order of sample names in side vector
+  m <- match(c("Fresh", "Fixed", "Cryopreserved", "Fixed+Cryopreserved"), sce$library_name)
+  
+  ## Create the sample level metadata by combining the reordered metadata with the number of cells corresponding to each sample.
+  #ei <- data.frame(colData(sce)[m, ], n_cells, row.names = NULL) %>% 
+  #  select(-"library_name")
+  
+  # Aggregate the counts per sample_id
+  # Subset metadata to only include the cluster and sample IDs to aggregate across
+  groups <- colData(sce)[, "library_name"]
+  
+  # Aggregate across cluster-sample groups
+  pb <- Matrix.utils::aggregate.Matrix(t(counts(sce)), groupings = groups, fun = "sum") 
+  
+  # Data scaling + log
+  MM <- apply(t(pb), 2, function(x){ if(max(x) > 0) { x/max(x) } else { x }})
+  
+  # Scale the scaling factor
+  MM <- 1e4 * MM
+  # LogTransform
+  MM <- log10(MM + 1)
+  MM <- as.data.frame(MM)
+  
+  return(MM)
+}
+```
+
+
+```{r}
+# Print out the table of cells in each cluster-sample group
+table(seurat_obj$celltypes, seurat_obj$library_name)
+```
+
+
+
+```{r fig.width=10, fig.height=10}
+set.seed(0)
+list_gg_cells_downs <- list()
+i <- 1
+
+for (cluster in levels(seurat_obj$celltypes)) {
+  if (sum(seurat_obj$celltypes == cluster) > 100 &&
+      all(as.numeric(table(seurat_obj$library_name[seurat_obj$celltypes == cluster])) > 20) ) {
+    
+    seurat_obj_c <- seurat_obj[, seurat_obj$celltypes == cluster]
+    seurat_obj_c$celltypes <- as.factor(as.character(seurat_obj_c$celltypes))
+    
+    Idents(seurat_obj_c) <- "library_name"
+    min_cells <- min(as.numeric(table(seurat_obj_c$library_name)))
+    
+    seurat_obj_c <- subset(seurat_obj_c, downsample = min_cells)
+    
+    #keep_genes <- rownames(seurat_obj_c)[Matrix::rowSums(seurat_obj_c[["RNA"]]@counts > 0) > 0]
+    #seurat_obj_c <- subset(seurat_obj_c, features = keep_genes)
+    
+    Idents(seurat_obj_c) <- "library_name"
+
+    
+    MM <- pseudobulk_cond(seurat_obj_c)
+    
+    gg <- { PerformanceAnalytics::chart.Correlation(MM, histogram=TRUE,  method="pearson", pch=19) 
+      recordPlot() }
+    list_gg_cells[[i]] <- gg
+    i <- i+1
+  }
+}
+```
+### Fixed vs Fresh
+```{r}
+# Only fixed vs fresh!
+seurat_obj_sub <- seurat_obj[, seurat_obj$library_name %in% c("Fresh", "Fixed")]
+seurat_obj_sub$library_name <- as.factor(as.character(seurat_obj_sub$library_name))
+
+set.seed(0)
+list_gg_cells_downs <- list()
+i <- 1
+
+for (cluster in levels(seurat_obj$celltypes)) {
+  if (sum(seurat_obj$celltypes == cluster) > 100 &&
+      all(as.numeric(table(seurat_obj$library_name[seurat_obj$celltypes == cluster])) > 20) ) {
+    
+    seurat_obj_c <- seurat_obj[, seurat_obj$celltypes == cluster]
+    seurat_obj_c$celltypes <- as.factor(as.character(seurat_obj_c$celltypes))
+    
+    Idents(seurat_obj_c) <- "library_name"
+    min_cells <- min(as.numeric(table(seurat_obj_c$library_name)))
+    
+    seurat_obj_c <- subset(seurat_obj_c, downsample = min_cells)
+    
+    #keep_genes <- rownames(seurat_obj_c)[Matrix::rowSums(seurat_obj_c[["RNA"]]@counts > 0) > 0]
+    #seurat_obj_c <- subset(seurat_obj_c, features = keep_genes)
+    
+    Idents(seurat_obj_c) <- "library_name"
+
+    
+    MM <- pseudobulk_cond(seurat_obj_c)
+    
+    # Pearson correlation between 2 variables
+    gg <- ggpubr::ggscatter(MM, x = "Fresh", y = "Fixed", 
+              add = "reg.line", # Add regression line
+              add.params = list(color = "blue", fill = "lightgray"),
+              conf.int = TRUE, # Add confidence interval
+              cor.coef = TRUE, 
+              cor.method = "pearson", # Add correlation coefficient.
+              xlab = "Fresh", ylab = "Fixed", 
+              title = cluster)
+
+    list_gg_cells_downs[[i]] <- gg
+    i <- i+1
+  }
+}
+```
+
+```{r fig.width=15, fig.height=15}
+cowplot::plot_grid(plotlist = list_gg_cells_downs, ncol = 4)
+
+ggsave(paste0(path_r_figs_out, "/HumanColon_Pseudobulk_FreshFixedcells_downs.png"),
+       width = 15, height = 15,
+       dpi = 300)
+```
+
+### F+C vs Cryo
+```{r}
+# Only fixed+cryo vs cryo!
+seurat_obj_sub <- seurat_obj[, seurat_obj$library_name %in% c("Cryopreserved", "Fixed+Cryopreserved")]
+seurat_obj_sub$library_name <- as.factor(as.character(seurat_obj_sub$library_name))
+
+set.seed(0)
+list_gg_cells_downs <- list()
+i <- 1
+
+for (cluster in levels(seurat_obj$celltypes)) {
+  if (sum(seurat_obj$celltypes == cluster) > 100 &&
+      all(as.numeric(table(seurat_obj$library_name[seurat_obj$celltypes == cluster])) > 20) ) {
+    
+    seurat_obj_c <- seurat_obj[, seurat_obj$celltypes == cluster]
+    seurat_obj_c$celltypes <- as.factor(as.character(seurat_obj_c$celltypes))
+    
+    Idents(seurat_obj_c) <- "library_name"
+    min_cells <- min(as.numeric(table(seurat_obj_c$library_name)))
+    
+    seurat_obj_c <- subset(seurat_obj_c, downsample = min_cells)
+    
+    #keep_genes <- rownames(seurat_obj_c)[Matrix::rowSums(seurat_obj_c[["RNA"]]@counts > 0) > 0]
+    #seurat_obj_c <- subset(seurat_obj_c, features = keep_genes)
+    
+    Idents(seurat_obj_c) <- "library_name"
+
+    
+    MM <- pseudobulk_cond(seurat_obj_c)
+    
+    # Pearson correlation between 2 variables
+    gg <- ggpubr::ggscatter(MM, x = "Cryopreserved", y = "Fixed+Cryopreserved", 
+              add = "reg.line", # Add regression line
+              add.params = list(color = "blue", fill = "lightgray"),
+              conf.int = TRUE, # Add confidence interval
+              cor.coef = TRUE, 
+              cor.method = "pearson", # Add correlation coefficient.
+              xlab = "Cryopreserved", ylab = "Fixed+Cryopreserved", 
+              title = cluster)
+
+    list_gg_cells_downs[[i]] <- gg
+    i <- i+1
+  }
+}
+```
+
+```{r fig.width=15, fig.height=15}
+cowplot::plot_grid(plotlist = list_gg_cells_downs, ncol = 4)
+
+ggsave(paste0(path_r_figs_out, "/HumanColon_Pseudobulk_FCCryocells_downs.png"),
+       width = 15, height = 15,
+       dpi = 300)
+```
+
+
+# Session Info
+```{r}
+sessionInfo()
+```
