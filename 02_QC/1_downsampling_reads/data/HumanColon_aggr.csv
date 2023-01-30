@@ -1,0 +1,5 @@
+sample_id,molecule_h5,library_name
+drqqjzym_3c2ryvzv,/scratch/devel/ljimenez/projects/FIXnCUT/01_cellranger_mapping/subprojects/THREETR_27/jobs/drqqjzym_3c2ryvzv/drqqjzym_3c2ryvzv/outs/per_sample_outs/drqqjzym_3c2ryvzv/count/sample_molecule_info.h5,Human colon_fresh
+vy7zj9cf_acmeyhd6,/scratch/devel/ljimenez/projects/FIXnCUT/01_cellranger_mapping/subprojects/THREETR_27/jobs/vy7zj9cf_acmeyhd6/vy7zj9cf_acmeyhd6/outs/per_sample_outs/vy7zj9cf_acmeyhd6/count/sample_molecule_info.h5,Human colon_fixed
+xj1wbujr_xv3enf58,/scratch/devel/ljimenez/projects/FIXnCUT/01_cellranger_mapping/subprojects/THREETR_27/jobs/xj1wbujr_xv3enf58/xj1wbujr_xv3enf58/outs/per_sample_outs/xj1wbujr_xv3enf58/count/sample_molecule_info.h5,Human colon_cryopreserved
+o5p4sf2u_vwljz9k4,/scratch/devel/ljimenez/projects/FIXnCUT/01_cellranger_mapping/subprojects/THREETR_27/jobs/o5p4sf2u_vwljz9k4/o5p4sf2u_vwljz9k4/outs/per_sample_outs/o5p4sf2u_vwljz9k4/count/sample_molecule_info.h5,Human colon_fixed_cryopreserved

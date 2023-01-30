@@ -1,0 +1,4 @@
+sample_id,molecule_h5,library_name
+btvimge6_fuk14b5o,/scratch/devel/ljimenez/projects/FIXnCUT/01_cellranger_mapping/subprojects/SCGTEST_33/jobs/btvimge6_fuk14b5o/btvimge6_fuk14b5o/outs/per_sample_outs/btvimge6_fuk14b5o/count/sample_molecule_info.h5,Lung_cryo
+wa4ylezj_f7kjs3op,/scratch/devel/ljimenez/projects/FIXnCUT/01_cellranger_mapping/subprojects/SCGTEST_33/jobs/wa4ylezj_f7kjs3op/wa4ylezj_f7kjs3op/outs/per_sample_outs/wa4ylezj_f7kjs3op/count/sample_molecule_info.h5,Lung_fixed_24h
+uyzd7xqc_jkya4jyl,/scratch/devel/ljimenez/projects/FIXnCUT/01_cellranger_mapping/subprojects/SCGTEST_33/jobs/uyzd7xqc_jkya4jyl/uyzd7xqc_jkya4jyl/outs/per_sample_outs/uyzd7xqc_jkya4jyl/count/sample_molecule_info.h5,Lung_fixed_cryo

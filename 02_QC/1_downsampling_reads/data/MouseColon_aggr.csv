@@ -1,0 +1,3 @@
+sample_id,molecule_h5,library_name
+xoxslu7q_8nia4zwr,/scratch/devel/ljimenez/projects/FIXnCUT/01_cellranger_mapping/subprojects/SCGTEST_32/jobs/xoxslu7q_8nia4zwr/xoxslu7q_8nia4zwr/outs/per_sample_outs/xoxslu7q_8nia4zwr/count/sample_molecule_info.h5,Colon_fresh
+bmgc51ex_jits5na1,/scratch/devel/ljimenez/projects/FIXnCUT/01_cellranger_mapping/subprojects/SCGTEST_32/jobs/bmgc51ex_jits5na1/bmgc51ex_jits5na1/outs/per_sample_outs/bmgc51ex_jits5na1/count/sample_molecule_info.h5,Colon_fixed_24h
