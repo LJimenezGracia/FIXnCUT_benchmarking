@@ -1,5 +1,5 @@
 ---
-title: "GEX Quality control: human_PBMC_healthy"
+title: "GEX Quality control: HumanPBMC"
 author: "Laura Jiménez Gracia"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -35,7 +35,7 @@ Here we will define and load objects and functions that will be used throughout 
 ```{r}
 # Paths
 path_project_metadata <- here::here("01_cellranger_mapping/data/FIXnCUT_metadata.csv")
-path_cellranger_data <- here::here(paste0("01_cellranger_mapping/subprojects/SCGTEST_34/jobs"))
+path_cellranger_data <- here::here(paste0("02_QC/1_downsampling_reads"))
 #path_scrublet_data <- here::here("02_QC/2_doublet_detection/results/tables")
 path_r_objects <- here::here("02_QC/results/R_objects")
 
@@ -43,15 +43,15 @@ path_r_objects <- here::here("02_QC/results/R_objects")
 source(here::here("bin/utils.R"))
 
 # Thresholds
-min_libsize <- 300
+min_libsize <- 1000
 max_libsize <- 25000
 
-min_ngenes <- 250
+min_ngenes <- 500
 max_ngenes <- 5000
 
-max_pctmt <- 25
+max_pctmt <- 20
 
-min_cells <- 8
+min_cells <- 10
 ```
 
 
@@ -63,8 +63,7 @@ metadata <- read.csv(path_project_metadata)
 
 # Merging metadata_all tables
 subproject_folder <- "SCGTEST_34"
-subproject_folder_n <- "SCGTEST34"
-tissue <- "PBMC"
+subproject_folder_n <- "HumanPBMC"
 
 metadata <- metadata %>% 
   filter(subproject == subproject_folder & tissue == tissue)
@@ -75,30 +74,45 @@ DT::datatable(metadata, options = list(scrollX = TRUE))
 
 
 ```{r}
-# Getting list of gem_ids
-gemid_list <- sort(unique(metadata$gem_id))
+# Metadata
+aggr_csv_path <- paste0(path_cellranger_data, "/data/", subproject_folder_n, "_aggr.csv")
+metadata_aggr <- read.csv(aggr_csv_path)
+
+for (index in rownames(metadata_aggr)) {
+  print(index)
+  lib_name <- metadata_aggr[index, ]$library_name
+  metadata_aggr[index, ]$gem_id <- metadata$gem_id[metadata$library_name == lib_name]
+}
 
 # Create Seurat object
 ## Counts data
-seurat_obj_list <- purrr::map(gemid_list, function(gem_id) {
-  filtered_matrix_path <- paste(path_cellranger_data, gem_id, gem_id, 
-                                    "outs/per_sample_outs", gem_id, "count/sample_feature_bc_matrix", sep = "/")
-  expression_matrix <- Read10X(data.dir = filtered_matrix_path)
-  seurat = CreateSeuratObject(counts = expression_matrix, project = gem_id)
-  # Add gem_id to each barcode (cell)
-  seurat$gem_id <- as.factor(gem_id)
-  seurat
-})
-names(seurat_obj_list) <- gemid_list
+filtered_matrix_path <- paste0(path_cellranger_data, "/", subproject_folder_n, "/outs/count/filtered_feature_bc_matrix")
+expression_matrix <- Read10X(data.dir = filtered_matrix_path)
+seurat_obj <- CreateSeuratObject(counts = expression_matrix, project = subproject_folder_n)
 
-# Merge Seurat objects
-seurat_obj <- merge(x = seurat_obj_list[[1]],
-                    y = seurat_obj_list[2:length(seurat_obj_list)],
-                    add.cell.ids = gemid_list)
+# Rename cellnames / columns
+gem_id_list <- purrr::map(colnames(seurat_obj), function(colname){
+  x <- str_split(colname, "-")[[1]]
+  gem_id <- metadata_aggr[x[2], ]$sample_id
+  gem_id
+  })
+gem_id_list <- unlist(gem_id_list)
+seurat_obj <- RenameCells(seurat_obj, add.cell.id = gem_id_list)
+head(colnames(seurat_obj))
 
-# Remove Seurat object list
-rm(seurat_obj_list)
+# Add orig.init and gem_id metadata
+seurat_obj$orig.ident <- gem_id_list
+seurat_obj$gem_id <- gem_id_list
 ```
+
+
+```{r}
+seurat_obj <- RenameCells(seurat_obj,
+                          new.names = str_replace(colnames(seurat_obj), pattern = regex("-[0-9]"), replacement = "-1"))
+head(colnames(seurat_obj))
+tail(colnames(seurat_obj))
+```
+
 
 ## Add library metadata
 Now, we will add metadata_all information of the different samples.
@@ -114,12 +128,13 @@ seurat_obj$disease <- as.factor(seurat_obj_metadata$disease)
 seurat_obj$sample_protocol <- as.factor(seurat_obj_metadata$sample_protocol)
 ```
 
+
 ## Add scrublet prediction
 ```{r}
 seurat_obj_list <- SplitObject(seurat_obj, split.by = "gem_id")
 
 # Add doublet predictions
-gem_ids <- unique(gemid_list)
+gem_ids <- unique(gem_id_list)
 scrublet_files_list <- purrr::map(unique(gem_ids), function(gem_id) {
   path_scrublet <- here::here(paste0(
   "02_QC/0_doublet_detection/results/", subproject_folder, "__", gem_id, "_doublet_prediction_scrublet.csv"))
@@ -159,6 +174,10 @@ seurat_obj <- merge(seurat_obj_list[[1]],
 
 # Remove Seurat object list
 rm(seurat_obj_list)
+
+# Rename
+seurat_obj$condition <- seurat_obj$sample_protocol
+seurat_obj$condition[seurat_obj$sample_protocol == "Fix&Cut_24h"] <- "Fixed"
 ```
 
 
@@ -232,6 +251,13 @@ gg_rb <- seurat_obj@meta.data %>%
 
 
 cowplot::plot_grid(gg_libsize, gg_libcomplex, gg_mt, gg_rb, ncol = 2)
+```
+
+## Save merged data
+```{r}
+# Save Merged Seurat object
+saveRDS(seurat_obj, str_c(path_r_objects, "/FIXnCUT_HumanPBMC_merged.rds"))
+#seurat_obj <- readRDS(str_c(path_r_objects, "/FIXnCUT_HumanPBMC_merged.rds"))
 ```
 
 
@@ -584,7 +610,6 @@ cowplot::plot_grid(plotlist = list(gg_ngenes_vs_cells_cutoff,
                                    gg_top40genes), ncol = 2)
 ```
 
-
 ## Filter out genes expressed in few cells
 ```{r}
 # Subset genes highly expressed
@@ -598,6 +623,14 @@ table(n_cells > min_cells)
 seurat_obj <- subset(seurat_obj, features = keep_genes)
 seurat_obj
 ```
+
+# Save filtered data
+```{r}
+# Save Merged Seurat object
+saveRDS(seurat_obj, str_c(path_r_objects, "/FIXnCUT_HumanPBMC_filtered.rds"))
+#seurat_obj <- readRDS(str_c(path_r_objects, "/FIXnCUT_HumanPBMC_filtered.rds"))
+```
+
 
 # Session Info
 ```{r}

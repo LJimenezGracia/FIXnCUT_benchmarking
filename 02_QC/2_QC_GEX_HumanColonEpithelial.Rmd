@@ -1,0 +1,620 @@
+---
+title: "GEX Quality control: HumanColon"
+author: "Laura Jiménez Gracia"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# Introduction
+As shown in the previous notebook, there are no major differences among all libraries processed and sequenced at CNAG in terms of sequencing depth, number of recovered cells, mean reads per cell, median genes per cell, among others. For this reason, we will merge all libraries together and we will perform a single quality control (QC) including all libraries. Therefore, unique QC thresholds will be determined and applied to all libraries.
+
+## Objective
+In this Rmarkdown document, we are going to perform a quality control (QC) in order to filter out low-quality cells and genes. To do so, we will follow the current best practices for scRNA-seq QC described in [Luecken al. Mol Syst Biol (2018)](https://doi.org/10.15252/msb.20188746).
+
+# Pre-processing
+## Libraries
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(Seurat)
+library(ggpubr)
+library(gt)
+library(grid)
+```
+
+## Parameters
+Here we will define and load objects and functions that will be used throughout the document.
+```{r}
+# Paths
+path_project_metadata <- here::here("01_cellranger_mapping/data/FIXnCUT_metadata.csv")
+path_r_objectsANNOT <- here::here("03_clustering_annotation/results/R_objects")
+path_r_objects <- here::here("02_QC/results/R_objects")
+
+# Functions
+source(here::here("bin/utils.R"))
+
+# Thresholds
+min_libsize <- 400
+max_libsize <- 40000
+
+min_ngenes <- 100
+max_ngenes <- 5000
+
+max_pctmt <- 60
+
+min_cells <- 10
+
+# Function
+get_density <- function(x, y, ...) {
+  # function from https://slowkow.com/notes/ggplot2-color-by-density/
+  dens <- MASS::kde2d(x, y, ...)
+  ix <- findInterval(x, dens$x)
+  iy <- findInterval(y, dens$y)
+  ii <- cbind(ix, iy)
+  return(dens$z[ii])
+}
+```
+
+
+## Load data
+The data used in this Rmarkdown document comes from **THREETR_27** dataset, filtered matrices were processed with `cellranger v6.1.1`, and the doublet predictions were obtained using `scrublet`.
+```{r}
+# Load all metadata information
+metadata <- read.csv(path_project_metadata)
+
+# Merging metadata_all THREETR_27
+subproject_folder <- "THREETR_27"
+subproject_folder_n <- "HumanColon"
+
+metadata <- metadata %>% 
+  filter(subproject == subproject_folder)
+
+metadata$library_name[metadata$library_name == "Human colon_fresh"] <- "Fresh"
+metadata$library_name[metadata$library_name == "Human colon_fixed"] <- "Fixed"
+metadata$library_name[metadata$library_name == "Human colon_cryopreserved"] <- "Cryopreserved"
+metadata$library_name[metadata$library_name == "Human colon_fixed_cryopreserved"] <- "Fixed+Cryopreserved"
+
+print("Libraries metadata")
+DT::datatable(metadata, options = list(scrollX = TRUE))
+
+seurat_obj <- readRDS(paste0(path_r_objectsANNOT, "/FIXnCUT_HumanColonEpithelial.rds"))
+```
+
+# GEX quality control
+First, we want to have an idea about the libraries quality. For this reason, we will plot the main QC variables and check how they distribute across libraries. This will help us interpret the results downstream, as we will know which are the libraries with lower quality.
+
+It is important to keep in mind that every library contains cells from a single mice, and we have two replicates for each condition.
+```{r fig.width=14, fig.height=10}
+# Plot library complexity
+gg_libsize <- seurat_obj@meta.data %>%
+  #dplyr::filter(HTO_classification.global == "Singlet") %>%
+    gg_gex_horizontal_boxplot(
+    categorical_var = "library_name",
+    continuous_var = "nCount_RNA",
+    fill = "sample_protocol",
+    title = "Library size",
+    ylab = "Total UMIs",
+    decreasing = TRUE
+  ) + scale_y_log10() +
+  theme(legend.position = "none")
+
+# Plot library complexity
+gg_libcomplex <- seurat_obj@meta.data %>%
+  #dplyr::filter(HTO_classification.global == "Singlet") %>%
+    gg_gex_horizontal_boxplot(
+    categorical_var = "library_name",
+    continuous_var = "nFeature_RNA",
+    fill = "sample_protocol",
+    title = "Library complexity",
+    ylab = "Number of Detected Genes",
+    decreasing = TRUE
+  ) + scale_y_log10() +
+  theme(legend.position = "none")
+
+
+# Plot MT expression
+gg_mt <- seurat_obj@meta.data %>%
+  #dplyr::filter(HTO_classification.global == "Singlet") %>%
+    gg_gex_horizontal_boxplot(
+    categorical_var = "library_name",
+    continuous_var = "pct_mt",
+    fill = "sample_protocol",
+    title = "Mitochondrial Expression",
+    ylab = "Fraction of Mitochondrial Genes (%)",
+    decreasing = TRUE
+  ) +
+  theme(legend.position = "none")
+
+
+# Plot RB expression
+gg_rb <- seurat_obj@meta.data %>%
+  #dplyr::filter(HTO_classification.global == "Singlet") %>%
+    gg_gex_horizontal_boxplot(
+    categorical_var = "library_name",
+    continuous_var = "pct_rb",
+    fill = "sample_protocol",
+    title = "Ribosomal Expression",
+    ylab = "Fraction of Ribosomal Genes (%)",
+    decreasing = TRUE
+  ) +
+  theme(legend.position = "none")
+
+
+cowplot::plot_grid(gg_libsize, gg_libcomplex, gg_mt, gg_rb, ncol = 2)
+```
+
+
+# Cell QC
+At this point, and before analyzing gene expression data, we must ensure that we will only work with single and viable cells. This means we need to detect all outlier cell barcodes, and filter them because they can correspond to empty droplets, dying or lysed cells. For this reason, we will be visualize and examine the distribution of three QC covariates, which are indeed hallmarks of dying cells:
+(1) Low library size  (Total UMIs)
+(2) Low library complexity (Number of Detected Genes), and 
+(3) High fraction of counts from mitochondrial genes (cytosolic mRNA leaks out of the cell).
+Finally, we would also explore the fraction of counts from ribosomal genes, but no filtering would be applied to them.
+
+## Library size
+```{r fig.height=5, fig.width=14}
+ggdens_libsize <- seurat_obj@meta.data %>%
+  ggplot(aes(x = nCount_RNA, fill = sample_protocol, color = sample_protocol)) +
+    geom_density(alpha = 0.2) + 
+    scale_x_log10() +
+    labs(x = "Library Size (Total UMI)",
+         y = "Density") +
+    theme_pubr() +
+    geom_vline(xintercept = min_libsize, linetype = "dashed", color = "red") +
+    geom_vline(xintercept = max_libsize, linetype = "dashed", color = "red") +
+    theme(axis.title = element_text(size = 12),
+          axis.text = element_text(size = 10),
+          legend.position = "bottom") +
+    guides(color = FALSE, fill = guide_legend(title = "Condition", ncol=3))
+
+gghist_libsize <- seurat_obj@meta.data %>%
+  ggplot(aes(nCount_RNA)) +
+    geom_histogram(bins = 100) +
+    labs(x = "Library Size (Total UMI)",
+         y = "Frequency") +
+    theme_pubr() +
+    geom_vline(xintercept = min_libsize, linetype = "dashed", color = "red") +
+    geom_vline(xintercept = max_libsize, linetype = "dashed", color = "red")
+
+cowplot::plot_grid(ggdens_libsize, gghist_libsize, ncol = 2)
+```
+
+The count depth (UMIs per cell) should generally be above 500 when 3' gene expression technologies are applied, that is the low end of what we expect. However, for the 5' gene expression experiments we expected to get lower quality results, this means fewer number of UMIs per cell.
+
+## Library complexity
+```{r fig.height=5, fig.width=14}
+ggdens_ngenes <- seurat_obj@meta.data %>%
+  ggplot(aes(x = nFeature_RNA, fill = sample_protocol, color = sample_protocol)) +
+    geom_density(alpha = 0.2) + 
+    scale_x_log10() +
+    labs(x = "Library complexity (Number of Detected Genes)",
+         y = "Density") +
+    theme_pubr() +
+    geom_vline(xintercept = min_ngenes, linetype = "dashed", color = "red") +
+    geom_vline(xintercept = max_ngenes, linetype = "dashed", color = "red") +
+    theme(axis.title = element_text(size = 12),
+          axis.text = element_text(size = 10),
+          legend.position = "bottom") +
+    guides(color = FALSE, fill = guide_legend(title = "Condition"))
+
+
+gghist_ngenes <- seurat_obj@meta.data %>%
+  ggplot(aes(nFeature_RNA)) +
+    geom_histogram(bins = 100) +
+    labs(x = "Library complexity (Number of Detected Genes)",
+         y = "Frequency") +
+    theme_pubr() +
+    geom_vline(xintercept = min_ngenes, linetype = "dashed", color = "red") +
+    geom_vline(xintercept = max_ngenes, linetype = "dashed", color = "red")
+
+cowplot::plot_grid(ggdens_ngenes, gghist_ngenes, ncol = 2)
+```
+
+Ideally, the density distribution of high-quality data should contain a single large peak. If we see a small shoulder to the right of the major peak (not present in our data), or a bimodal distribution of the cells, that can indicate the failure of a set of cells, a group of cells that are biologically different types (i.e. quiescent cells), and/or presence of cell types much smaller than the others.
+
+
+## Fraction of mitochondrial expression
+```{r fig.height=5, fig.width=14}
+ggdens_pctmt <- seurat_obj@meta.data %>%
+  ggplot(aes(x = pct_mt, fill = sample_protocol, color = sample_protocol)) +
+    geom_density(alpha = 0.2) + 
+    labs(x = "% Mitochondrial Expression",
+         y = "Density") +
+    theme_pubr() +
+    geom_vline(xintercept = max_pctmt, linetype = "dashed", color = "red") +
+    theme(axis.title = element_text(size = 12),
+          axis.text = element_text(size = 10),
+          legend.position = "bottom") +
+    guides(color = FALSE, fill = guide_legend(title = "Condition"))
+
+
+gghist_pctmt <- seurat_obj@meta.data %>%
+  ggplot(aes(pct_mt)) +
+    geom_histogram(bins = 100) +
+    scale_x_continuous(limits = c(0, 100)) +
+    labs(x = "% Mitochondrial Expression",
+         y = "Frequency") +
+    theme_pubr() +
+    geom_vline(xintercept = max_pctmt, linetype = "dashed", color = "red")
+
+cowplot::plot_grid(ggdens_pctmt, gghist_pctmt, ncol = 2)
+```
+
+High mitochondrial read fractions could be indicative of damaged/dying cells whose cytoplasmic mRNA has leaked out through a broken membrane, and thus, only mRNA located in the mitochondria is still conserved.
+
+```{r fig.width=25, fig.height=5}
+ggplot_mts <- purrr::map(levels(seurat_obj$sample_protocol), function(protocol){
+  seurat <- seurat_obj[, seurat_obj$sample_protocol == protocol]
+  df <- seurat@meta.data
+  df$density <- get_density(df$pct_mt, df$nCount_RNA, n = 1000)
+  gg <- ggplot(df) +
+    geom_point(aes(pct_mt, nCount_RNA, color = density), size = 0.25) +
+    viridis::scale_color_viridis() +
+    scale_y_sqrt() +
+    scale_x_sqrt(breaks = c(1,10, 25, 50, 75, 100), limits = c(0, 100)) +
+    geom_vline(xintercept = max_pctmt, linetype = 2, color = 'red') +
+    labs(title=protocol) +
+    theme_classic() +
+    theme(text = element_text( size = 12), 
+          axis.title = element_text( size = 12),
+          legend.text = element_blank())
+  gg
+})
+
+cowplot::plot_grid(plotlist = ggplot_mts, ncol = 4)
+```
+
+
+```{r fig.width=25, fig.height=5}
+ggplot_mts <- purrr::map(levels(seurat_obj$sample_protocol), function(protocol){
+  seurat <- seurat_obj[, seurat_obj$sample_protocol == protocol]
+  df <- seurat@meta.data
+  df$density <- get_density(df$pct_mt, df$nFeature_RNA, n = 1000)
+  gg <- ggplot(df) +
+    geom_point(aes(pct_mt, nFeature_RNA, color = density), size = 0.25) +
+    viridis::scale_color_viridis() +
+    scale_y_sqrt() +
+    scale_x_sqrt(breaks = c(1,10, 25, 50, 75, 100), limits = c(0, 100)) +
+    geom_vline(xintercept = max_pctmt, linetype = 2, color = 'red') +
+    labs(title=protocol) +
+    theme_classic() +
+    theme(text = element_text( size = 12), 
+          axis.title = element_text( size = 12),
+          legend.text = element_blank())
+  gg
+})
+
+cowplot::plot_grid(plotlist = ggplot_mts, ncol = 4)
+```
+
+```{r fig.width=25, fig.height=5}
+ggplot_mts <- purrr::map(levels(seurat_obj$sample_protocol), function(protocol){
+  seurat <- seurat_obj[, seurat_obj$sample_protocol == protocol]
+  df <- seurat@meta.data
+  df$density <- get_density(df$pct_mt, df$nFeature_RNA, n = 1000)
+  gg <- ggplot(df) +
+    geom_point(aes(pct_mt, nFeature_RNA, color = density), size = 0.25) +
+    viridis::scale_color_viridis() +
+    scale_y_sqrt() +
+    scale_x_sqrt(breaks = c(1,10, 25, 50, 75, 100), limits = c(0, 100)) +
+    geom_vline(xintercept = max_pctmt, linetype = 2, color = 'red') +
+    labs(title=protocol) +
+    theme_classic() +
+    theme(text = element_text( size = 12), 
+          axis.title = element_text( size = 12),
+          legend.text = element_blank())
+  gg
+})
+
+cowplot::plot_grid(plotlist = ggplot_mts, ncol = 4)
+```
+
+
+## Fraction of ribosomal expression
+```{r fig.height=5, fig.width=14}
+ggdens_pctrb <- seurat_obj@meta.data %>%
+  ggplot(aes(x = pct_rb, fill = sample_protocol, color = sample_protocol)) +
+    geom_density(alpha = 0.2) + 
+    labs(x = "% Ribosomal Expression",
+         y = "Density") +
+    theme_pubr() +
+    theme(axis.title = element_text(size = 12),
+          axis.text = element_text(size = 10),
+          legend.position = "bottom") +
+    guides(color = FALSE, fill = guide_legend(title = "Condition"))
+
+gghist_pctrb <- seurat_obj@meta.data %>%
+  ggplot(aes(pct_rb)) +
+    geom_histogram(bins = 100) +
+    scale_x_continuous(limits = c(0, 100)) +
+    labs(x = "% Ribosomal Expression",
+         y = "Frequency") +
+    theme_pubr()
+
+cowplot::plot_grid(ggdens_pctrb, gghist_pctrb, ncol = 2)
+```
+
+
+```{r fig.width=25, fig.height=5}
+ggplot_mts <- purrr::map(levels(seurat_obj$sample_protocol), function(protocol){
+  seurat <- seurat_obj[, seurat_obj$sample_protocol == protocol]
+  df <- seurat@meta.data
+  df$density <- get_density(df$pct_mt, df$pct_rb, n = 1000)
+  gg <- ggplot(df) +
+    geom_point(aes(pct_mt, pct_rb, color = density), size = 0.25) +
+    viridis::scale_color_viridis() +
+    scale_y_sqrt() +
+    scale_x_sqrt(breaks = c(1,10, 25, 50, 75, 100), limits = c(0, 100)) +
+    geom_vline(xintercept = max_pctmt, linetype = 2, color = 'red') +
+    labs(title=protocol) +
+    theme_classic() +
+    theme(text = element_text( size = 12), 
+          axis.title = element_text( size = 12),
+          legend.text = element_blank())
+  gg
+})
+
+cowplot::plot_grid(plotlist = ggplot_mts, ncol = 4)
+```
+
+## Fraction of ribosomal expression in mitochondria
+```{r}
+# Calculate percentage mitocondrial genes
+seurat_obj$pct_rb_mt <- PercentageFeatureSet(
+  seurat_obj,
+  pattern = "^MRP[SL]"
+)
+```
+
+```{r fig.height=5, fig.width=14}
+ggdens_pctrbmt <- seurat_obj@meta.data %>%
+  ggplot(aes(x = pct_rb_mt, fill = sample_protocol, color = sample_protocol)) +
+    geom_density(alpha = 0.2) + 
+    labs(x = "% Ribosomal Expression from Mitochondria",
+         y = "Density") +
+    theme_pubr() +
+    theme(axis.title = element_text(size = 12),
+          axis.text = element_text(size = 10),
+          legend.position = "bottom") +
+    guides(color = FALSE, fill = guide_legend(title = "Condition"))
+
+gghist_pctrbmt <- seurat_obj@meta.data %>%
+  ggplot(aes(pct_rb_mt)) +
+    geom_histogram(bins = 100) +
+    scale_x_continuous(limits = c(0, 100)) +
+    labs(x = "% Ribosomal Expression from Mitochondria",
+         y = "Frequency") +
+    theme_pubr()
+
+cowplot::plot_grid(ggdens_pctrbmt, gghist_pctrbmt, ncol = 2)
+```
+
+```{r fig.width=25, fig.height=5}
+ggplot_mtsrb <- purrr::map(levels(seurat_obj$sample_protocol), function(protocol){
+  seurat <- seurat_obj[, seurat_obj$sample_protocol == protocol]
+  df <- seurat@meta.data
+  df$density <- get_density(df$pct_rb_mt, df$nFeature_RNA, n = 1000)
+  gg <- ggplot(df) +
+    geom_point(aes(pct_rb_mt, nFeature_RNA, color = density), size = 0.25) +
+    viridis::scale_color_viridis() +
+    scale_y_sqrt() +
+    scale_x_sqrt(breaks = c(1,10, 25, 50, 75, 100), limits = c(0, 100)) +
+    #geom_vline(xintercept = , linetype = 2, color = 'red') +
+    labs(title=protocol) +
+    theme_classic() +
+    theme(text = element_text( size = 12), 
+          axis.title = element_text( size = 12),
+          legend.text = element_blank())
+  gg
+})
+
+cowplot::plot_grid(plotlist = ggplot_mtsrb, ncol = 4)
+```
+
+## JointQC metrics
+After examining the previous results, we can see that the distribution of the three QC covariates is really similar among different libraries. For this reason, we will determine common QC thresholds for all of them.
+
+It is important not to consider the QC covariates independently as this can lead to the misinterpretation of results (e.g. cells with low counts could correspond to quiescent cells, whereas cells with high counts may be bigger, metabolically active cells might also have higher mitochondrial expression). For this reason, we will jointly explore how these three variables covary in order to set univariate thresholds.
+
+```{r fig.height=10, fig.width=14}
+# Library size / count depth
+ggdens_libsize <- seurat_obj@meta.data %>% 
+    ggplot(aes(x = nCount_RNA)) + 
+    geom_density() + 
+    scale_x_log10() +
+  labs(x = "Library size (total UMI)",
+       y = "Density") +
+  theme_pubr() +
+  theme(axis.title = element_text(size = 12),
+        axis.text = element_text(size = 10))
+
+ggdens_libsize_cutoff <- ggdens_libsize +
+  geom_vline(xintercept = min_libsize, color = "red") +
+  geom_vline(xintercept = max_libsize, color = "red")
+
+
+# Library complexity
+ggdens_ngenes <- seurat_obj@meta.data %>% 
+    ggplot(aes(x = nFeature_RNA)) + 
+    geom_density() + 
+    scale_x_log10() +
+  labs(x = "Number of Genes",
+       y = "Density") +
+  theme_pubr() +
+  theme(axis.title = element_text(size = 12),
+        axis.text = element_text(size = 10))
+
+ggdens_ngenes_cutoff <- ggdens_ngenes +
+  geom_vline(xintercept = min_ngenes, color = "red") +
+  geom_vline(xintercept = max_ngenes, color = "red")
+
+
+# Library complexity vs Library size by %MT
+gg_ngenes_vs_libsize_by_pctmt <- seurat_obj@meta.data %>%
+  ggplot(aes(nCount_RNA, nFeature_RNA, color = pct_mt)) +
+  geom_point(size = 0.15) +
+  scale_color_viridis_c() +
+  theme_classic() +
+  labs(x = "Library size (total UMI)",
+       y = "Number of Genes",
+       color = "% Mitochondrial Expression") +
+  theme(axis.title = element_text(size = 12),
+      axis.text = element_text(size = 10),
+      legend.title = element_text(angle = 90),
+      )
+                             
+gg_ngenes_vs_libsize_by_pctmt_cutoff <- gg_ngenes_vs_libsize_by_pctmt +
+  geom_vline(xintercept = min_libsize, color = "red") +
+  geom_hline(yintercept = min_ngenes, color = "red") +
+  geom_vline(xintercept = max_libsize, color = "red", linetype = "dashed") +
+  geom_hline(yintercept = max_ngenes, color = "red", linetype = "dashed")
+  
+  
+# %MT vs Library size
+gg_pctmt_vs_libsize <- FeatureScatter(
+  seurat_obj,
+  feature1 = "nCount_RNA",
+  feature2 = "pct_mt",
+  pt.size = 0.15,
+  cols = rep("black", length(levels(Idents(seurat_obj))))
+)
+
+gg_pctmt_vs_libsize <- gg_pctmt_vs_libsize +
+  ylim(0, 100) +
+  labs(x = "Library size (total UMI)",
+       y = "% Mitochondrial Expression") +
+  theme(legend.position = "none",
+        plot.title = element_blank())
+
+gg_pctmt_vs_libsize_cutoff <- gg_pctmt_vs_libsize +
+  geom_hline(yintercept = max_pctmt, color = "red") +
+  geom_vline(xintercept = min_libsize, color = "red") +
+  geom_vline(xintercept = max_libsize, color = "red", linetype = "dashed")
+
+cowplot::plot_grid(plotlist = list(ggdens_libsize_cutoff,
+                                   ggdens_ngenes_cutoff,
+                                   gg_ngenes_vs_libsize_by_pctmt_cutoff,
+                                   gg_pctmt_vs_libsize_cutoff),
+                   ncol = 2)
+```
+
+
+```{r}
+# Library complexity vs Library size by %MT
+seurat_obj@meta.data %>%
+  ggplot(aes(nCount_RNA, nFeature_RNA, color = library_name)) +
+  geom_point(size = 0.15) +
+  theme_classic() +
+  labs(x = "Library size (total UMI)",
+       y = "Number of Genes",
+       color = "Library") +
+  theme(axis.title = element_text(size = 12),
+      axis.text = element_text(size = 10),
+      legend.title = element_text(angle = 90),
+      )
+```
+
+In the bottom left graph, we have plotted the number of genes vs the number of counts colored by the fraction of mitochondrial reads. As it can be observed, mitochondrial read fractions are only high in particularly low count cells with few detected genes, which will be filtered out by the minimum count depth and gene number thresholds. Good cells will generally exhibit both higher number of genes and counts per cell.
+
+```{r}
+# Metadata before cell filtering
+metadata_before_qc <- seurat_obj@meta.data
+```
+
+
+# Test exploring high MT cells
+
+```{r}
+seurat_obj_list <- SplitObject(seurat_obj, split.by = "library_name")
+
+seurat_FC_highMT <- subset(seurat_obj_list$`Fixed+Cryopreserved`, subset = pct_mt > 60)
+seurat_FC_lowMT <- subset(seurat_obj_list$`Fixed+Cryopreserved`, subset = pct_mt <= 60)
+```
+
+
+```{r}
+mt_genes <- c("MT-ND1", "MT-ND2", "MT-CO1", "MT-CO2", "MT-ATP8", "MT-ATP6",
+              "MT-CO3", "MT-ND3", "MT-ND4L","MT-ND4", "MT-ND5", "MT-ND6", "MT-CYB") # 13
+
+# Levels of expression of mitochondrial genes counts & data
+rowSums(seurat_FC_highMT@assays$RNA@counts[mt_genes, ])
+rowSums(seurat_FC_lowMT@assays$RNA@counts[mt_genes, ])
+
+rowSums(seurat_FC_highMT@assays$RNA@data[mt_genes, ])
+rowSums(seurat_FC_lowMT@assays$RNA@data[mt_genes, ])
+```
+
+
+```{r}
+sum(rowSums(seurat_FC_highMT@assays$RNA@counts))
+sum(rowSums(seurat_FC_lowMT@assays$RNA@counts))
+
+sum(rowSums(seurat_FC_highMT@assays$RNA@data))
+sum(rowSums(seurat_FC_lowMT@assays$RNA@data))
+```
+
+
+```{r}
+# Numbers of detected genes & overlap
+summary(Matrix::colSums(seurat_FC_highMT[["RNA"]]@counts > 0))
+summary(Matrix::colSums(seurat_FC_lowMT[["RNA"]]@counts > 0))
+```
+
+
+## Filter out low quality cells
+
+Different threshold values have been selected according to the previous results. On one side, cell barcodes with a low count depth (< `r min_libsize`), few detected genes (< `r min_ngenes`), and a high fraction of mitochondrial counts (> `r max_pctmt`%) are indicative of lysed cells (cytoplasmic mRNA was lost through the broken membrane, and only mitochondria mRNA was conserved). Therefore, we will proceed to filter them out.
+
+```{r}
+# Subset low quality cell barcodes
+low_quality_subset <-
+  seurat_obj$nCount_RNA < min_libsize |
+  seurat_obj$nFeature_RNA < min_ngenes |
+  seurat_obj$pct_mt > max_pctmt
+table(low_quality_subset)
+```
+
+
+```{r}
+# Filtering out low quality cell barcodes
+seurat_obj$keep_cells <- !low_quality_subset
+Idents(seurat_obj) <- "keep_cells"
+seurat_obj <- subset(seurat_obj, idents = TRUE)
+seurat_obj$keep_cells <- NULL
+```
+
+```{r}
+# Metadata after filtering cells
+metadata_after_qc <- seurat_obj@meta.data
+```
+
+
+## QC summary table
+
+```{r}
+table_qc_gex(metadata_before_qc, subtitle = "Before cell QC filtering out")
+
+table_qc_gex(metadata_after_qc, subtitle = "After cell QC filtering out")
+```
+
+
+# Save filtered data
+```{r}
+# Save Merged Seurat object
+saveRDS(seurat_obj, str_c(path_r_objects, "/FIXnCUT_HumanColonEpithelial_filtered.rds"))
+#seurat_obj <- readRDS(str_c(path_r_objects, "/FIXnCUT_HumanColonEpithelial_filtered.rds"))
+```
+
+
+# Session Info
+```{r}
+sessionInfo()
+```
