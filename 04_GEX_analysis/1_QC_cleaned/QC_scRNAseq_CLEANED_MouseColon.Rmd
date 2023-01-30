@@ -1,0 +1,317 @@
+---
+title: "scRNAseq QC parameters"
+author: "Laura Jiménez Gracia"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# Introduction
+
+## Objective
+In this Rmarkdown document, we are going to 
+
+# Pre-processing
+## Libraries
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(Seurat)
+library(gt)
+```
+
+## Parameters
+Here we will define and load objects and functions that will be used throughout the document.
+```{r}
+# Paths
+path_project_metadata <- here::here("01_cellranger_mapping/data/FIXnCUT_metadata.csv")
+path_r_figs_out <- here::here("04_GEX_analysis/results/figs")
+
+# Functions
+source(here::here("bin/utils.R"))
+
+# Parameters
+confounder_variables <- c("library_name", "sample_protocol", "fixation_time")
+confounder_names <- c("Library", "Sample Protocol", "Fixation time")
+
+metadata_variables_confounder <- c("nCount_RNA", "nFeature_RNA", "gem_id", 
+                                   "pct_mt", "pct_rb", "Phase",
+                                   "library_name", "sample_protocol", "fixation_time")
+palette_color_factor <- c("Fresh" = "#66C2A5", 
+                          "Fixed" ="#FC8D62")
+
+palette_color_cells <- c("T-NK cells" = "#E2711D", 
+                       "Myeloid cells" = "#590D22", 
+                       "Immature B cells" = "#7371FC", 
+                       "Mature B cells" = "#c8b6ff",
+                       "Distal Colonocytes" = "#22577A", 
+                       "Distal Colonocytes Emp1+" = "#38A3A5",
+                       "Proximal Colonocytes" = "#57CC99",
+                       "Transit-amplifying (TA) cells" = "#C7F9CC",
+                       "Goblet cells" = "#590d22", 
+                       "Paneth cells" = "#a4133c", 
+                       "Tuft cells" = "#ff758f",
+                       "Enteroendocrine (EEC) cells" = "#ffccd5" ,  
+                       "Endothelium" = "#BB9457", 
+                       "Lymphatic Endothelial cells" = "#FFB627",
+                       "Myofibroblasts" = "#432818", 
+                       "Stromal cells" = "#99582A"
+                         )
+
+set.seed(1234) # for reproducibility 
+```
+
+## Load metadata
+The data used in this Rmarkdown document comes from **SCGTEST_32** dataset.
+```{r}
+# Load all metadata information
+metadata <- read.csv(path_project_metadata)
+
+# Merging metadata tables
+metadata <- metadata %>% 
+  filter(subproject == "SCGTEST_32" & tissue == "Colon")
+
+print("Libraries/Samples metadata")
+DT::datatable(metadata, options = list(scrollX = TRUE))
+```
+
+
+```{r}
+# Load Seurat object
+seurat_obj <- readRDS(here::here("03_clustering_annotation/results/R_objects/FIXnCUT_MouseColon_filtered_post_clustering_annotation.rds"))
+seurat_obj
+
+seurat_obj$celltypes <- factor(x = seurat_obj$celltypes,
+                                    levels = c("T-NK cells", "Myeloid cells", "Immature B cells", "Mature B cells",
+                                               "Distal Colonocytes", "Distal Colonocytes Emp1+", "Proximal Colonocytes",
+                                               "Transit-amplifying (TA) cells", "Goblet cells", "Paneth cells", "Tuft cells",
+                                               "Enteroendocrine (EEC) cells", "Endothelium", "Lymphatic Endothelial cells",
+                                               "Myofibroblasts", "Stromal cells"
+                                               ))
+```
+
+
+```{r}
+table_qc_gex(seurat_obj@meta.data, subtitle = "After cell QC filtering out")
+```
+
+
+```{r fig.width=7, fig.height=6}
+DimPlot(
+  seurat_obj,
+  reduction = "pca",
+  group.by = "library_name",
+  shuffle = TRUE,
+  pt.size = 0.25) +
+  scale_color_manual(values = palette_color_factor) +
+  labs(title = "", color = "")
+
+ggsave(paste0(path_r_figs_out, "/MouseColon_PCA.svg"),
+       width = 7, height = 6,
+       dpi = 300)
+```
+
+```{r fig.width=7, fig.height=6}
+DimPlot(
+  seurat_obj,
+  reduction = "umap",
+  group.by = "library_name",
+  shuffle = TRUE,
+  pt.size = 0.25) +
+  scale_color_manual(values = palette_color_factor) +
+  labs(title = "", color = "") +
+  theme(legend.text = element_text(size = 15))
+
+ggsave(paste0(path_r_figs_out, "/MouseColon_UMAP.svg"),
+       width = 7, height = 6,
+       dpi = 300)
+```
+
+```{r fig.width=10, fig.height=5}
+DimPlot(
+  seurat_obj,
+  reduction = "umap",
+  group.by = "sample_protocol",
+  split.by = "library_name") +
+  scale_color_manual(values = palette_color_factor) &
+  labs(title = "", color = "") + NoLegend()
+
+ggsave(paste0(path_r_figs_out, "/MouseColon_UMAPsplit.svg"),
+       width = 15, height = 5,
+       dpi = 300)
+```
+
+
+# QC metrics
+```{r fig.height=5, fig.width=15}
+VlnPlot(seurat_obj,
+        features = c("nCount_RNA", "nFeature_RNA", "pct_mt"),
+        group.by = "library_name",
+        pt.size = 0,
+        log = TRUE,
+        ncol = 3
+        ) &
+  scale_fill_manual(values = palette_color_factor) &
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, size = 20),
+          axis.title = element_blank(),
+          axis.text.y = element_text(size = 15)
+        ) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+                 geom='crossbar', colour = "black",
+                 width=0.4, position = position_dodge(width = .75))
+  #ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
+  #                               label = "p.format", label.y.npc = 0.95)
+
+ggsave(paste0(path_r_figs_out, "/MouseColon_QCmetrics.svg"),
+       width = 20, height = 6,
+       dpi = 300)
+```
+
+
+# QC metrics by cell-type
+```{r}
+seurat_metadata <-  seurat_obj@meta.data %>% 
+  gather(key = "qc_metric", value = "qc_metric_value", c("nCount_RNA", "nFeature_RNA", "pct_mt"))
+```
+
+
+```{r fig.height=10, fig.width=20}
+ggplot(seurat_metadata, 
+       aes(x = celltypes, y = qc_metric_value, fill = library_name)) +
+  introdataviz::geom_split_violin() +
+  theme_classic() +
+#    ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
+#                                 label = "p.signif", label.y.npc = 0.95) + # p.format)
+  scale_y_log10() +
+  scale_fill_manual(values = palette_color_factor) +
+  scale_color_manual(values = palette_color_factor) +
+  labs(x = "Cell-types", y="") +
+  facet_wrap(~qc_metric, scales = "free_y", nrow = 3) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title = element_blank(),
+        strip.text = element_text(size=20),
+          legend.position = "right",
+          legend.text = element_text(size = 20),
+          legend.title=element_blank()) +
+    guides(fill = guide_legend(override.aes = list(color = NA), reverse = TRUE), 
+           color = FALSE
+           )
+
+ggsave(paste0(path_r_figs_out, "/MouseColon_QCmetricsCell.svg"),
+       width = 20, height = 10,
+       dpi = 300)
+```
+
+
+
+# Cell-types UMAP
+```{r fig.width=10, fig.height=7}
+# Clustering overview
+DimPlot(object = seurat_obj,
+        group.by = "celltypes",
+        repel = TRUE,
+        cols = palette_color_cells,
+        shuffle = TRUE,
+        pt.size = 0.25
+        ) +
+  labs(title = "Cell types") +
+  guides(color = guide_legend(override.aes = list(size = 5), ncol = 1))
+
+ggsave(paste0(path_r_figs_out, "/MouseColon_UMAPcelltypes.svg"),
+       width = 10, height = 7,
+       dpi = 300)
+```
+
+
+
+# Celltypes Proportions
+```{r fig.width=10, fig.height=7}
+gg_c <- dittoSeq::dittoBarPlot(seurat_obj, 
+                             "celltypes",
+                             group.by = "library_name",
+                             scale = "count",
+                            retain.factor.levels = TRUE,
+                       legend.show  = FALSE,
+                             color.panel = palette_color_cells) +
+  coord_flip() + 
+  labs(title = "") +
+  theme(axis.text.y = element_text(size=20),
+        axis.text.x = element_text(angle = 0, hjust = 0.5, size=14),
+        axis.title.x = element_text(size=20),
+        axis.title.y = element_blank())
+
+gg_p <- dittoSeq::dittoBarPlot(seurat_obj, 
+                             "celltypes",
+                             group.by = "library_name",
+                             scale = "percent",
+                            retain.factor.levels = TRUE,
+                       legend.show  = FALSE,
+                             color.panel = palette_color_cells) +
+  coord_flip() + 
+  labs(title = "") +
+  theme(axis.text.y = element_text(size=20),
+        axis.text.x = element_text(angle = 0, hjust = 0.5, size=14),
+        axis.title.x = element_text(size=20),
+        axis.title.y = element_blank())
+
+gg <- gg_c / gg_p
+
+print(gg)
+
+ggsave(paste0(path_r_figs_out, "/MouseColon_CellProp.svg"),
+       width = 10, height = 5,
+       dpi = 300)
+```
+
+
+
+# Dotplot gene markers
+```{r fig.width=12, fig.height=6}
+genes_of_interest <- c("Cd3e", "Cd3d", "Klrd1", # T-NK cells, 
+                       "Cd14", "Apoe", "C1qa", # Myeloid cells
+                       "Ebf1", "Cd79a", "Ms4a1", "H2-Eb1", # Immature B cells 
+                       # Mature B cells",
+                       "Mep1a", "Emp1", "Guca2a", "Aqp8", # Distal Colonocytes"
+                       "Cbr1", # Proximal Colonocytes
+                       "Tubb5", "Stmn1", "Cenpf", # Transit-amplifying (TA) cells
+                       "Tff3", "Manf", # Goblet cells", 
+                       "Mptx1", # Paneth cells", 
+                       "Lrmp", "Dclk1", "Cd24a", # "Tuft cells",
+                       "Chgb", "Cpe", "Gfra3", # Enteroendocrine (EEC) cells", 
+                       "Fabp4", "Pecam1", "Plvap", # Endothelium", 
+                       "Lyve1", # Lymphatic Endothelial cells
+                       "Postn", "Col6a2", #Myofibroblasts", 
+                       "Dcn" #Stromal cells"
+                       )
+                       
+genes_of_interest <- unique(genes_of_interest)
+
+DotPlot(seurat_obj,
+        features = genes_of_interest,
+        group.by = "celltypes",
+        #scale = TRUE,
+        #col.max = 3,
+        #col.min = 0,
+        cols = "RdYlBu",
+        dot.scale = 8) +
+  theme(axis.text.x = element_text(angle=90, hjust = 1, vjust = 0.5),
+        axis.title = element_blank(),
+        legend.position = "bottom")
+
+ggsave(paste0(path_r_figs_out, "/MouseColon_DotplotMarkers.svg"),
+       width = 14, height = 7,
+       dpi = 300)
+```
+
+# Session Info
+```{r}
+sessionInfo()
+```

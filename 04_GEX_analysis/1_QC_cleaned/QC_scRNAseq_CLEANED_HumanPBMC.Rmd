@@ -1,0 +1,349 @@
+---
+title: "scRNAseq QC parameters"
+author: "Laura Jiménez Gracia"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# Introduction
+
+## Objective
+In this Rmarkdown document, we are going to 
+
+# Pre-processing
+## Libraries
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(Seurat)
+library(gt)
+library(grid)
+library(RColorBrewer)
+library(parallelDist)
+library(scales)
+library(gtable)
+```
+
+## Parameters
+Here we will define and load objects and functions that will be used throughout the document.
+```{r}
+# Paths
+path_project_metadata <- here::here("01_cellranger_mapping/data/FIXnCUT_metadata.csv")
+path_r_figs_out <- here::here("04_GEX_analysis/results/figs")
+
+# Functions
+source(here::here("bin/utils.R"))
+
+# Parameters
+confounder_variables <- c("library_name", "sample_protocol", "fixation_time")
+confounder_names <- c("Library", "Sample Protocol", "Fixation time")
+
+metadata_variables_confounder <- c("nCount_RNA", "nFeature_RNA", "gem_id", 
+                                   "pct_mt", "pct_rb", "Phase",
+                                   "library_name", "sample_protocol", "fixation_time")
+
+palette_color_factor <- c("Fresh" = "#66C2A5", 
+                          "Fixed" ="#FC8D62")
+
+palette_color_cells <- c("Naive CD4+ T cells" = "#184E77",
+                         "Transitional Memory CD4+ T cells" = "#1E6091",
+                         "Central Memory CD4+ T cells" = "#1A759F",
+                         "Effector Memory CD4+ T cells" = "#168AAD",
+                         "Tregs" = "#34A0A4",
+                         "Naive CD8+ T cells" = "#52B69A",
+                         "Cytotoxic CD8+ T cells" = "#76C893",
+                         "gdT cells" = "#99D98C",
+                         "MAIT" = "#D9ED92",
+                         "NK cells" = "#FFB627",
+
+                         "Classical Monocytes" = "#590D22", 
+                         "Intermediate Monocytes" = "#A4133C",
+                         "Non-classical Monocytes" = "#FF4D6D",
+                         "DC1/DC2" = "#FF8FA3",
+                         "pDCs" = "#FFCCD5",
+
+                         "Naive B cells" = "#7371FC",
+                         "Memory B cells" = "#CDC1FF",
+                         
+                         "Progenitor cells" = "#595959",
+                         "Cycling cells" = "#A5A5A5"
+                         )
+set.seed(1234) # for reproducibility 
+```
+
+## Load metadata
+The data used in this Rmarkdown document comes from **SCGTEST_34** dataset.
+```{r}
+# Load all metadata information
+metadata <- read.csv(path_project_metadata)
+
+# Merging metadata tables
+metadata <- metadata %>% 
+  filter(subproject == "SCGTEST_34" & tissue == "PBMC")
+
+print("Libraries/Samples metadata")
+DT::datatable(metadata, options = list(scrollX = TRUE))
+```
+
+
+```{r}
+# Load Seurat object
+seurat_obj <- readRDS(here::here("03_clustering_annotation/results/R_objects/FIXnCUT_HumanPBMC_clustering_annotation_cleaned.rds"))
+seurat_obj
+
+seurat_obj$celltypes <- factor(x = seurat_obj$celltypes,
+                                    levels = c("Naive CD4+ T cells", "Transitional Memory CD4+ T cells",
+                         "Central Memory CD4+ T cells", "Effector Memory CD4+ T cells", "Tregs", 
+                         "Naive CD8+ T cells", "Cytotoxic CD8+ T cells", "gdT cells", "MAIT", "NK cells",
+                         "Classical Monocytes", "Intermediate Monocytes", "Non-classical Monocytes",
+                         "DC1/DC2","pDCs",
+                         "Naive B cells", "Memory B cells",
+                         "Progenitor cells","Cycling cells"))
+```
+
+
+```{r}
+table_qc_gex(seurat_obj@meta.data, subtitle = "After cell QC filtering out")
+```
+
+
+```{r fig.width=7, fig.height=6}
+DimPlot(
+  seurat_obj,
+  reduction = "pca",
+  group.by = "condition",
+  shuffle = TRUE,
+  pt.size = 0.25) +
+  scale_color_manual(values = palette_color_factor) +
+  labs(title = "", color = "")
+
+ggsave(paste0(path_r_figs_out, "/HumanPBMC_PCA.svg"),
+       width = 7, height = 6,
+       dpi = 300)
+```
+
+```{r fig.width=7, fig.height=6}
+DimPlot(
+  seurat_obj,
+  reduction = "umap",
+  group.by = "condition",
+  shuffle = TRUE,
+  pt.size = 0.25) +
+  scale_color_manual(values = palette_color_factor) +
+  labs(title = "", color = "") +
+  theme(legend.text = element_text(size = 15))
+
+ggsave(paste0(path_r_figs_out, "/HumanPBMC_UMAP.svg"),
+       width = 7, height = 6,
+       dpi = 300)
+```
+
+```{r fig.width=10, fig.height=5}
+DimPlot(
+  seurat_obj,
+  reduction = "umap",
+  group.by = "condition",
+  split.by = "condition") +
+  scale_color_manual(values = palette_color_factor) &
+  labs(title = "", color = "") + NoLegend()
+
+ggsave(paste0(path_r_figs_out, "/HumanPBMC_UMAPsplit.svg"),
+       width = 10, height = 5,
+       dpi = 300)
+```
+
+# QC metrics
+```{r fig.height=5, fig.width=15}
+VlnPlot(seurat_obj,
+        features = c("nCount_RNA", "nFeature_RNA", "pct_mt", "pct_rb"),
+        group.by = "condition",
+        pt.size = 0,
+        log = TRUE,
+        ncol = 4
+        ) &
+  scale_fill_manual(values = palette_color_factor) &
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, size = 20),
+          axis.title = element_blank(),
+          axis.text.y = element_text(size = 15)
+        ) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+                 geom='crossbar', colour = "black",
+                 width=0.4, position = position_dodge(width = .75))
+  #ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
+  #                               label = "p.format", label.y.npc = 0.95)
+
+ggsave(paste0(path_r_figs_out, "/HumanPBMC_QCmetrics.svg"),
+       width = 20, height = 6,
+       dpi = 300)
+```
+
+
+# QC metrics by cell-type
+```{r}
+seurat_metadata <-  seurat_obj@meta.data %>% 
+  gather(key = "qc_metric", value = "qc_metric_value", c("nCount_RNA", "nFeature_RNA", "pct_mt"))
+```
+
+
+```{r fig.height=10, fig.width=20}
+ggplot(seurat_metadata, 
+       aes(x = celltypes, y = qc_metric_value, fill = condition)) +
+  introdataviz::geom_split_violin() +
+  theme_classic() +
+#    ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
+#                                 label = "p.signif", label.y.npc = 0.95) + # p.format)
+  #scale_y_log10() +
+  scale_fill_manual(values = palette_color_factor) +
+  scale_color_manual(values = palette_color_factor) +
+  labs(x = "Cell-types", y="") +
+  facet_wrap(~qc_metric, scales = "free_y", nrow = 3) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title = element_blank(),
+        strip.text = element_text(size=20),
+          legend.position = "right",
+          legend.text = element_text(size = 20),
+          legend.title=element_blank()) +
+    guides(fill = guide_legend(override.aes = list(color = NA), reverse = TRUE), 
+           color = FALSE
+           )
+
+ggsave(paste0(path_r_figs_out, "/HumanPBMC_QCmetricsCell.svg"),
+       width = 20, height = 10,
+       dpi = 300)
+```
+
+
+# Cell-types UMAP
+```{r fig.width=10, fig.height=7}
+# Clustering overview
+DimPlot(object = seurat_obj,
+        group.by = "celltypes",
+        repel = TRUE,
+        cols = palette_color_cells,
+        shuffle = TRUE,
+        pt.size = 0.25
+        ) +
+  labs(title = "Cell types") +
+  guides(color = guide_legend(override.aes = list(size = 5), ncol = 1))
+
+ggsave(paste0(path_r_figs_out, "/HumanPBMC_UMAPcelltypes.svg"),
+       width = 10, height = 7,
+       dpi = 300)
+```
+
+# Celltypes Proportions
+```{r fig.width=10, fig.height=5}
+dittoSeq::dittoBarPlot(seurat_obj, 
+                             "celltypes",
+                             group.by = "condition",
+                             scale = "percent",
+                            retain.factor.levels = TRUE,
+                       legend.show  = FALSE,
+                             color.panel = palette_color_cells) +
+  coord_flip() + 
+  labs(title = "") +
+  theme(axis.text.y = element_text(size=20),
+        axis.text.x = element_text(angle = 0, hjust = 0.5, size=14),
+        axis.title.x = element_text(size=20),
+        axis.title.y = element_blank())
+
+ggsave(paste0(path_r_figs_out, "/HumanPBMC_CellProp.svg"),
+       width = 10, height = 5,
+       dpi = 300)
+```
+
+# Dotplot gene markers
+```{r fig.width=14, fig.height=7}
+genes_of_interest <- c("CD3E",	"CD4", # Tcells
+                       "CCR7",	"LEF1",	"TCF7", # Naive CD4+ T cells
+                       "CRIP1", "ITGB1", "CCR10", # Transitional CD4+ T cells
+                       "IL7R",	"PASK", #	Central Memory CD4+ T cells	 
+                       "MAF",	"S100A4",	"IL32", # Effector Memory CD4+ T cells
+                       "FOXP3",	"DUSP",	"CTLA4", # Tregs
+                       "CD8A",	"CD8B", # CD8+
+                       "GLYN",	"CCL5",	"NKG7", # Cytotoxic CD8+ T cells
+                       "TRDC",	"TRGC1",	"KLRC1", # gd T cells
+                       "KLRB1",	"IL7R", "GZMK", # MAIT
+                       "FCGR3A",	"GNLY",	"KLRD1", # NK cells
+                       "CD14",	"LYZ",	"FCGR3A", # Monocytes
+                       "VCAN",	# Classical
+                       "HAVCR2",	"HLA-DRA", "HLA-DPA1", # Intermediate
+                       "MS4A7",	"LST1", # Non-classical
+                       "CLEC9A", "HLA-DPA1", "CD1C",	"CLEC10A", # DC1/DC2
+                       "JCHAIN",	"IL3RA",	"IRF8", # pDCs
+                       "CD79A",	"CD19",	"MS4A1", # B cells
+                       "IGHD",	"IGHM",	"CCR7", # Naive
+                        # Memory
+                       "CD34", "SOX4", # Progenitors
+                       "STMN1",	"TOP2A", "MKI67" # Cycling
+                       )
+genes_of_interest <- unique(genes_of_interest)
+
+DotPlot(seurat_obj,
+        features = genes_of_interest,
+        group.by = "celltypes",
+        #scale = TRUE,
+        #col.max = 3,
+        #col.min = 0,
+        cols = "RdYlBu",
+        dot.scale = 8) +
+  theme(axis.text.x = element_text(angle=90, hjust = 1, vjust = 0.5),
+        axis.title = element_blank(),
+        legend.position = "bottom")
+
+ggsave(paste0(path_r_figs_out, "/HumanPBMC_DotplotMarkers.svg"),
+       width = 14, height = 7,
+       dpi = 300)
+```
+
+
+```{r fig.width=15, fig.height=6}
+avgexpr_mat <- AverageExpression(
+  features = genes_of_interest,
+  seurat_obj,
+  assays = "RNA",
+  return.seurat = F,
+  group.by = "celltypes",
+  slot = "counts")
+
+cell_types <- names(table(seurat_obj$celltypes))
+mycolors <- list(cell_type = palette_color_cells)
+mat <- as.data.frame(avgexpr_mat$RNA)
+colnames(mat) <- cell_types
+annotation_col = data.frame(
+                    cell_type = cell_types) 
+rownames(annotation_col) <- cell_types
+
+input_mat <- t(apply(mat, MARGIN = 1, FUN = function(X) (X - min(X))/diff(range(X))))
+
+#pdf(paste(figures_folder, "M6B_reduced_genes_heatmap.pdf", sep=""),width=5,height=7,paper='special') 
+pheatmap2::pheatmap2(t(input_mat),
+                annotation_names_col = F,
+                annotation_legend = F,
+                show_rownames=T, show_colnames = T, 
+                border_color = NA,
+                cluster_rows = F,
+                cluster_cols = F,
+                fontsize_row = 12,
+                gaps_row = c(10,15,17), 
+                gaps_col = c(27,38,46), 
+)
+
+ggsave(paste0(path_r_figs_out, "/HumanPBMC_HeatmapMarkers.svg"),
+       width = 15, height = 6,
+       dpi = 300)
+```
+
+# Session Info
+```{r}
+sessionInfo()
+```
