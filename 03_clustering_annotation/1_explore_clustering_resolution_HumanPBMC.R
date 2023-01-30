@@ -42,7 +42,7 @@ color_palette = c("aquamarine", "orange", "lightgreen", "blueviolet", "maroon",
 
 # Load Data
 ## Load Seurat object
-seurat_obj <- readRDS(paste0(path_r_objects_in, "/scgtest34_h_PBMC_healthy_lognorm_harmony_processed.rds"))
+seurat_obj <- readRDS(paste0(path_r_objects_in, "/FIXnCUT_HumanPBMC_lognorm_processed.rds"))
 DefaultAssay(seurat_obj) <- "RNA"
 
 
@@ -50,7 +50,7 @@ DefaultAssay(seurat_obj) <- "RNA"
 ## Determine the K-nearest neighbor graph
 seurat_obj <- FindNeighbors(
   seurat_obj,
-  reduction = "harmony",
+  reduction = "pca",
   dims = 1:20)
 
 ## Determine the clusters (Louvain algorithm) for multiple resolutions                                
@@ -70,7 +70,7 @@ gg_umap_cluster_resolution <- DimPlot(object = seurat_obj,
                                       ) & NoLegend()
 
 # Save image
-ggsave(filename = paste0(path_r_figs, "/scgtest34_h_PBMC_healthy_clustering_resolutions_umap.png"),
+ggsave(filename = paste0(path_r_figs, "/FIXnCUT_HumanPBMC_clustering_resolutions_umap.png"),
        plot = gg_umap_cluster_resolution,
        width = 25,
        height = 25)
@@ -79,5 +79,5 @@ ggsave(filename = paste0(path_r_figs, "/scgtest34_h_PBMC_healthy_clustering_reso
 # Save cell-type biomarkers
 ## Export in .rds object
 saveRDS(seurat_obj, 
-        file = paste0(path_r_objects_out, "/scgtest34_h_PBMC_healthy_clustering_resolutions.rds"))
-#seurat_obj <- readRDS(paste0(path_r_objects_out, "/scgtest34_h_PBMC_healthy_clustering_resolutions.rds"))
+        file = paste0(path_r_objects_out, "/FIXnCUT_HumanPBMC_clustering_resolutions.rds"))
+#seurat_obj <- readRDS(paste0(path_r_objects_out, "/FIXnCUT_HumanPBMC_clustering_resolutions.rds"))

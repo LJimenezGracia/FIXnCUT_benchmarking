@@ -42,7 +42,7 @@ color_palette = c("aquamarine", "orange", "lightgreen", "blueviolet", "maroon",
 
 # Load Data
 ## Load Seurat object
-seurat_obj <- readRDS(paste0(path_r_objects_in, "/omniscope39_m_LUNG_healthy_stress_lognorm_harmony_processed.rds"))
+seurat_obj <- readRDS(paste0(path_r_objects_in, "/FIXnCUT_HumanColon_lognorm_harmony_processed.rds"))
 DefaultAssay(seurat_obj) <- "RNA"
 
 
@@ -70,7 +70,7 @@ gg_umap_cluster_resolution <- DimPlot(object = seurat_obj,
                                       ) & NoLegend()
 
 # Save image
-ggsave(filename = paste0(path_r_figs, "/omniscope39_m_LUNG_healthy_stress_clustering_resolutions_umap.png"),
+ggsave(filename = paste0(path_r_figs, "/FIXnCUT_HumanColon_clustering_resolutions_umap.png"),
        plot = gg_umap_cluster_resolution,
        width = 25,
        height = 25)
@@ -79,5 +79,5 @@ ggsave(filename = paste0(path_r_figs, "/omniscope39_m_LUNG_healthy_stress_cluste
 # Save cell-type biomarkers
 ## Export in .rds object
 saveRDS(seurat_obj, 
-        file = paste0(path_r_objects_out, "/omniscope39_m_LUNG_healthy_stress_clustering_resolutions.rds"))
-#seurat_obj <- readRDS(paste0(path_r_objects_out, "/omniscope39_m_LUNG_healthy_stress_clustering_resolutions.rds"))
+        file = paste0(path_r_objects_out, "/FIXnCUT_HumanColon_clustering_resolutions.rds"))
+#seurat_obj <- readRDS(paste0(path_r_objects_out, "/FIXnCUT_HumanColon_clustering_resolutions.rds"))

@@ -38,11 +38,11 @@ color_palette = c("aquamarine", "orange", "lightgreen", "blueviolet", "maroon",
                   "darkgray", "red", "green", "deepskyblue3",  "gold3", "magenta", 
                   "pink", "violet", "blue", "darkgreen",  "gold", "coral2", 
                   "navy", "yellow", "darkblue", "palegreen", "peachpuff", "steelblue",
-                  "cyan3", "lightblue", "green3")
+                  "cyan3", "lightblue", "green3", "green1", "green3", "coral3")
 
 # Load Data
 ## Load Seurat object
-seurat_obj <- readRDS(paste0(path_r_objects_in, "/scgtest32_m_COLON_healthy_downs_lognorm_harmony_processed.rds"))
+seurat_obj <- readRDS(paste0(path_r_objects_in, "/FIXnCUT_MouseColon_filtered_post_lognorm_harmony_processed.rds"))
 DefaultAssay(seurat_obj) <- "RNA"
 
 
@@ -51,7 +51,7 @@ DefaultAssay(seurat_obj) <- "RNA"
 seurat_obj <- FindNeighbors(
   seurat_obj,
   reduction = "harmony",
-  dims = 1:30)
+  dims = 1:20)
 
 ## Determine the clusters (Louvain algorithm) for multiple resolutions                                
 seurat_obj <- FindClusters(
@@ -70,7 +70,7 @@ gg_umap_cluster_resolution <- DimPlot(object = seurat_obj,
                                       ) & NoLegend()
 
 # Save image
-ggsave(filename = paste0(path_r_figs, "/scgtest32_m_COLON_healthy_downs_clustering_resolutions_umap.png"),
+ggsave(filename = paste0(path_r_figs, "/FIXnCUT_MouseColon_clustering_resolutions_umap.png"),
        plot = gg_umap_cluster_resolution,
        width = 25,
        height = 25)
@@ -79,5 +79,5 @@ ggsave(filename = paste0(path_r_figs, "/scgtest32_m_COLON_healthy_downs_clusteri
 # Save cell-type biomarkers
 ## Export in .rds object
 saveRDS(seurat_obj, 
-        file = paste0(path_r_objects_out, "/scgtest32_m_COLON_healthy_downs_clustering_resolutions.rds"))
-#seurat_obj <- readRDS(paste0(path_r_objects_out, "/scgtest32_m_COLON_healthy_downs_clustering_resolutions.rds"))
+        file = paste0(path_r_objects_out, "/FIXnCUT_MouseColon_clustering_resolutions.rds"))
+#seurat_obj <- readRDS(paste0(path_r_objects_out, "/FIXnCUT_MouseColon_clustering_resolutions.rds"))
