@@ -1,0 +1,606 @@
+---
+title: "Annotation"
+author: "Laura Jiménez Gracia"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# Introduction
+After the pre-processing steps done in previous notebooks, we will now start with the downstream data analysis in order to extract biological insights and describe the underlying biology.
+
+## Objective
+In this Rmarkdown document, we are going to assign cell type clusters into different cell-types clusters based on the similarity of their gene expression profiles. Then, we will perform again process each object to define cell-type specific clusters with more resolution.
+
+# Pre-processing
+## Libraries
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(Seurat)
+library(DT)
+library(dittoSeq)
+```
+
+## Parameters
+Here we will define and load objects and functions that will be used throughout the document.
+```{r}
+# Paths
+path_project_metadata <- here::here("01_cellranger_mapping/data/FIXnCUT_metadata.csv")
+path_r_objects <- here::here("03_clustering_annotation/results/R_objects")
+path_r_tables <- here::here("03_clustering_annotation/results/tables")
+path_r_figs <- here::here("03_clustering_annotation/results/figs")
+
+# Functions
+source(here::here("bin/utils.R"))
+
+## Define resolution of choice
+resolution <- 0.25
+resolution_name <- paste0("RNA_snn_res.", resolution)
+
+# Color palette
+set.seed(1234) # for reproducibility
+color_palette <- Polychrome::createPalette(35, c("#fc6060", "#74f774", "#7c7cfc"))
+names(color_palette) <- NULL
+#Polychrome::swatch(color_palette)
+```
+
+## Load data
+The data used in this Rmarkdown document comes from **THREETR_25** dataset.
+```{r}
+# Load all metadata information
+metadata <- read.csv(path_project_metadata)
+metadata <- metadata %>% 
+  filter(subproject == "THREETR_25" & tissue == "Colon")
+
+print("Libraries/Samples metadata")
+DT::datatable(metadata, options = list(scrollX = TRUE))
+
+# Load Seurat object
+seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_HumanColon_cryo_clustering_resolutions.rds"))
+DefaultAssay(seurat_obj) <- "RNA"
+Idents(seurat_obj) <- "RNA_snn_res.0.25"
+seurat_obj
+
+# Load biomarkers
+seurat_obj_markers <- readRDS(paste0(path_r_objects, "/biomarkers_FIXnCUT_HumanColon_cryo_resolution0.25.rds"))
+```
+
+
+# Explore cell clusters
+To visualize the cell clusters, there are a few different dimensionality reduction techniques, such as t-SNE and UMAP. These methods require to input a number of PCA dimensions (same number as the one used for the clustering). We will not run UMAP again as it was computed in the previous notebook.
+```{r fig.width=14, fig.height=10}
+# Clustering overview
+gg_umap_clustering <- DimPlot(object = seurat_obj,
+        group.by = resolution_name,
+        label = TRUE,
+        label.size = 6,
+        cols = color_palette,
+        pt.size=0.5
+        ) & NoLegend()
+gg_umap_clustering
+```
+
+Now, we will also explore clusters across conditions.
+```{r fig.width=14, fig.height=5}
+# Clusters across tissues
+gg_clustering_by_umap <- DimPlot(
+  object = seurat_obj,
+  group.by = resolution_name,
+  split.by = "sample_protocol",
+  label = FALSE,
+  cols = color_palette,
+  ncol = 3
+  )
+
+gg_clustering_by_umap
+```
+
+
+## Cell clusters data exploration
+```{r}
+# Number of cells / cluster
+table(seurat_obj@active.ident)
+
+# Number of cells per cluster vs confounder variables
+table(seurat_obj$library_name, seurat_obj@active.ident)
+
+# Creating new annotation variable
+seurat_obj$celltypes <- as.character(seurat_obj@active.ident)
+Idents(seurat_obj) <- "celltypes"
+```
+
+
+## Assessing sources of uninteresting variation
+Next, we will explore additional metrics, such as the number of UMIs and genes per cell, mitochondrial / ribosomal gene expression and scrublet doublet scores on the UMAP embedding. 
+
+```{r fig.width=14, fig.height=10}
+qc_metrics <-  c("nCount_RNA", "nFeature_RNA", "pct_mt", "pct_rb")
+
+gg_qc_umap <- FeaturePlot(
+  seurat_obj,
+  reduction = "umap",
+  features = qc_metrics,
+  cols = c("lightgrey", "darkblue"), 
+  order = TRUE,
+  ncol = 2)
+
+gg_qc_umap
+```
+
+```{r fig.width=10, fig.height=15}
+gg_qc_vln <- VlnPlot(
+  seurat_obj,
+  features = qc_metrics,
+  cols = color_palette, 
+  pt.size = 0,
+  ncol = 1)
+
+gg_qc_vln
+```
+
+Finally, we will also check the cell-cycle phase by assessing S-phase and G2M-phase markers signature.
+```{r fig.width=10, fig.height=10}
+gg_phase_vln <- VlnPlot(
+  seurat_obj,
+  features = c("S.Score", "G2M.Score"),
+  cols = color_palette, 
+  pt.size = 0,
+  ncol = 1)
+
+gg_phase_vln
+```
+
+# Explore cluster biomarkers
+```{r}
+DefaultAssay(seurat_obj) <- "RNA"
+```
+
+## Table
+```{r}
+# Visualize top markers per cluster
+top_all_markers <- seurat_obj_markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 10, order_by = avg_log2FC)
+
+top_all_markers
+DT::datatable(top_all_markers, options = list(scrollX = TRUE))
+```
+
+## Dotplot
+```{r fig.width=20, fig.height=6}
+# Visualize top markers per cluster
+top_all_markers <- seurat_obj_markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 4, order_by = avg_log2FC)
+
+top_genemarkers_list <- unique(top_all_markers$gene)
+
+DotPlot(
+  seurat_obj,
+  features = top_genemarkers_list,
+  dot.scale = 6) +
+  RotatedAxis()
+```
+
+<!-- ## FeaturePlot and ViolinPlot -->
+<!-- With the cells clustered and based on the previous cell-type markers, we will select the most informative gene markers for each cluster and some well-known cell markers and project them in the UMAP. Basically, we are looking for consistency of expression of the markers across the clusters (e.g. if there are two markers for a cell type and only one of them is expressed in a cluster, we cannot reliably assign that cluster to the cell type). -->
+<!-- ```{r} -->
+<!-- # Selected gene markers -->
+<!-- selected_markers <- seurat_obj_markers %>% -->
+<!--   group_by(cluster) %>% -->
+<!--   slice_max(n = 4, order_by = avg_log2FC) %>% -->
+<!--   group_split() -->
+<!-- ``` -->
+
+<!-- ```{r fig.width=7, fig.height=5} -->
+<!-- # Feature plots -->
+<!-- purrr::map(selected_markers, function(cluster) { -->
+<!--   FeaturePlot(seurat_obj, -->
+<!--               features = cluster$gene, -->
+<!--               label = TRUE, -->
+<!--               label.size = 3, -->
+<!--               ncol = 2) -->
+<!-- }) -->
+<!-- ``` -->
+
+
+## Gene expression
+
+```{r fig.width=25, fig.height=20}
+lineage_genes <- c("PTPRC", # CD45+, immune cells
+                   "CD3D", "CD3E", # T cells
+                   "CD4",  "IRF7", "FOXP3", # CD4+ T cells, Treg
+                   "CD8A", "CD8B", "NKG7", # CD8+ T cells, cytotoxic
+                   "KLRD1", "GZMA", # NK cells
+                   "CD79A", # B cells
+                   "MS4A1", "JCHAIN", # Naive vs Plasma cells
+                   "LYZ", "CD14", "FCGR3A", "PLAC8", "CD209", # Mono/macro/DCs
+                   "S100A9", "CD200R3", # Neutrophils, Mast cells
+                   "MKI67", "TOP2A", "HLA-DRA" # Cycling, MHC-antigen presenting
+                   )
+
+FeaturePlot(seurat_obj,
+            features = lineage_genes,
+            label = T,
+            #split.by = "tissue",
+            #order = T,
+            pt.size = 0.25,
+            ncol = 5)
+
+VlnPlot(
+  seurat_obj,
+  features = lineage_genes,
+  cols = color_palette, 
+  pt.size = 0, 
+  ncol = 5)
+```
+
+
+```{r fig.width=20, fig.height=20}
+lineage_genes <- c("EPCAM", "KRT8", "KRT18", # Epithelial cells
+                        "PECAM1", "LYVE1", # Endothelial cells
+                        "LYPD8", "LGALS4", # Intestinal cells
+                        "DPT", "LY6A", "PI16", # Univ Fibroblasts
+                        "CLU", "SLPI", # Mesothelial cells
+                        "RGS5", "ACTA2", # Pericytes
+                        "BMP4", "BMP5", # Telocytes
+                        "CFD", "CAR3" # Adipocytes
+                         )
+
+FeaturePlot(seurat_obj,
+            features = lineage_genes,
+            label = T,
+            #split.by = "tissue",
+            #order = T,
+            pt.size = 0.25,
+            ncol = 4)
+
+VlnPlot(
+  seurat_obj,
+  features = lineage_genes,
+  cols = color_palette, 
+  pt.size = 0, 
+  ncol = 4)
+```
+
+
+### Myeloid
+
+```{r fig.width=20, fig.height=15}
+mono_genes <- c("CD14", "ITGAM", "CCR2", "SELL", "CD36",
+                "FCGR3A", "CX3CR1", "ITGAL", "HLA-DRA", "AIF1",
+                "CD68", "CD163") 
+# classical CD14/CCR2/Cd11b == ITGAM, non-classical CD16 == FCGR3A, intermediate 
+FeaturePlot(seurat_obj,
+            features = mono_genes,
+            #split.by = "therapy",
+            #order = T,
+            pt.size = 0.5,
+            ncol = 4
+)
+
+VlnPlot(
+  seurat_obj,
+  features = mono_genes,
+  cols = color_palette, 
+  pt.size = 0, 
+  ncol = 4)
+```
+
+
+```{r fig.width=15, fig.height=5}
+cDC2_genes <- c("CD1C", "FCER1A", "CLEC10A")
+FeaturePlot(seurat_obj,
+            features = cDC2_genes,
+            #split.by = "tissue",
+            pt.size = 0.25,
+            ncol = 3
+)
+
+VlnPlot(
+  seurat_obj,
+  features = cDC2_genes,
+  pt.size = 0, 
+  ncol = 3)
+```
+
+
+### B Lymphocytes
+```{r fig.width=20, fig.height=10}
+Bnaive_genes <- c("MS4A1", "CD79A", "CD79B", "HLA-DRA",
+                  "CD69", "FCER2", "CD1C", "CD48", "CD81", "JUN", "CD86")
+
+FeaturePlot(seurat_obj,
+            features = Bnaive_genes,
+            #split.by = "therapy",
+            #order = T,
+            pt.size = 0.5,
+            ncol = 4
+)
+
+VlnPlot(
+  seurat_obj,
+  features = Bnaive_genes,
+  cols = color_palette, 
+  pt.size = 0, 
+  ncol = 4)
+```
+
+
+```{r fig.width=20, fig.height=15}
+Plasma_genes <- c("CD27", "JCHAIN", "XBP1", "CD38", "RF4", "XBP1", "IGHD", "IGHM", "MKI67", "HLA-DRA", "MZB1", "SLAMF7", "SSR4")
+# RF4/XBP1/PRDM1 = early PC /PCprec
+# SLAMF7/MZB1/SSR4+ Ig = Mature
+# when proliferating = Plasmablast
+
+FeaturePlot(seurat_obj,
+            features = Plasma_genes,
+            #split.by = "therapy",
+            #order = T,
+            pt.size = 0.5,
+            ncol = 4
+)
+
+VlnPlot(
+  seurat_obj,
+  features = Plasma_genes,
+  cols = color_palette, 
+  pt.size = 0, 
+  ncol = 4)
+```
+
+
+### T Lymphocytes
+
+```{r fig.width=30, fig.height=15}
+T_genes <- c("CD3D", "CD3E",# T cells
+            "CD4", "FOXP3", # CD4+ T cells, Treg
+            "CD8A", "CD8B", "NKG7", "GZMK", "GZMB", # CD8+ T cells, cytotoxic
+            "SELL", "CCR7", "LEF1", "CD27", "CD69", "HLA-DRB1"
+             )
+
+FeaturePlot(seurat_obj,
+            features = T_genes,
+            #split.by = "therapy",
+            #order = T,
+            pt.size = 0.25,
+            ncol = 5)
+
+VlnPlot(
+  seurat_obj,
+  features = T_genes,
+  cols = color_palette, 
+  pt.size = 0, 
+  ncol = 5)
+```
+
+
+### Innate cells
+
+```{r fig.width=14, fig.height=10}
+NKCD56bright_genes <- c("GPR183", "IL7R", "GZMK", "CD62L", "CD2", "KLRC1", "KLRD1", "NCAM1", "XCL1", "XCL2")
+
+FeaturePlot(seurat_obj,
+            features = NKCD56bright_genes,
+            #split.by = "tissue",
+            pt.size = 0.25,
+            ncol = 3
+)
+
+VlnPlot(
+  seurat_obj,
+  features = NKCD56bright_genes,
+  cols = color_palette, 
+  pt.size = 0.1, 
+  ncol = 3)
+```
+
+
+### Colon-specific celltypes
+
+
+### Others
+```{r fig.width=20, fig.height=10}
+doublets <- c("CD3D", "CD3E", "CD14", "STMN1", "CD79A", "CD79B") 
+
+FeaturePlot(seurat_obj,
+            features = doublets,
+            #split.by = "therapy",
+            #order = T,
+            pt.size = 0.5,
+            ncol = 4
+)
+
+VlnPlot(
+  seurat_obj,
+  features = doublets,
+  cols = color_palette, 
+  pt.size = 0, 
+  ncol = 4)
+```
+
+
+
+# Annotation
+According to the previous cell-type identities enriched in several gene markers, we will establish the following annotation:
+
+```{r}
+# GENERAL
+Idents(seurat_obj) <- "celltypes"
+
+seurat_obj <- RenameIdents(
+  seurat_obj,
+ "0" = "Plasma cells",
+ "1" = "Epithelial cells",
+ "2" = "Endothelial cells",
+ "3" = "Telocytes",
+ "4" = "T cells",
+ "5" = "Mesothelial cells",
+ "6" = "Plasma cells",
+ "7" = "Pericytes",
+ "8" = "Smooth Muscular cells",
+ "9" = "Stromal cells",
+ "10" = "Low quality cells",
+ "11" = "Myeloid cells",
+ "12" = "Endothelial cells", 
+ "13" = "Doublets"
+ )
+
+# Creating new annotation variable
+seurat_obj$celltypes <- as.factor(as.character(seurat_obj@active.ident))
+seurat_obj$celltypes <- factor(seurat_obj$celltypes, levels = sort(levels(seurat_obj$celltypes)))
+```
+
+
+```{r}
+# Exploring number of celltypes
+table(seurat_obj$celltypes, seurat_obj$condition)
+table(seurat_obj$sample_protocol)
+```
+
+
+## UMAP celltypes
+```{r fig.width=16, fig.height=10}
+# Clustering overview
+gg_umap_clustering_annot <- DimPlot(object = seurat_obj,
+        group.by = "celltypes",
+        repel = TRUE,
+        cols = color_palette
+        ) +
+  labs(title = "Cell types") +
+  guides(color = guide_legend(override.aes = list(size = 5), ncol = 1))
+gg_umap_clustering_annot
+
+ggsave(filename = paste0(path_r_figs, "/FIXnCUT_HumanColon_cryo_clustering_annotation_umap.png"),
+       plot = gg_umap_clustering_annot)
+```
+
+Now, we will also explore clusters across sample.
+```{r fig.width=15, fig.height=5}
+DimPlot(
+  object = seurat_obj,
+  group.by = "celltypes",
+  split.by = "sample_protocol",
+  label = FALSE,
+  cols = color_palette
+  )
+```
+
+## Cell proportions
+```{r fig.width=12, fig.height=6}
+gg_cell_num <- dittoBarPlot(seurat_obj, 
+                            "celltypes",
+                            group.by = "condition",
+                            scale = "count",
+                            retain.factor.levels = TRUE,
+                            legend.show = FALSE,
+                            color.panel = color_palette)
+
+gg_cell_prop <- dittoBarPlot(seurat_obj, 
+                             "celltypes",
+                             group.by = "condition",
+                             scale = "percent",
+                            retain.factor.levels = TRUE,
+                             color.panel = color_palette)
+
+gg_cell_num + gg_cell_prop
+```
+
+## Save Seurat object
+```{r}
+# Save lineage annotations
+saveRDS(seurat_obj$celltypes,
+        paste0(path_r_objects, "/FIXnCUT_HumanColon_cryo_cellsnames.rds"))
+
+# Save Seurat object
+saveRDS(seurat_obj, paste0(path_r_objects, "/FIXnCUT_HumanColon_cryo_clustering_annotation.rds"))
+#seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_HumanColon_cryo_clustering_annotation.rds"))
+```
+
+
+
+# Remove uninteresting cells
+```{r}
+Idents(seurat_obj) <- "celltypes"
+cells_to_remove <- c("Doublets", "Low quality cells")
+
+seurat_obj_cleaned <- subset(seurat_obj, idents = cells_to_remove, invert = TRUE)
+seurat_obj_cleaned$celltypes <- as.factor(as.character(seurat_obj_cleaned$celltypes))
+
+table(seurat_obj_cleaned$celltypes)
+length(unique(seurat_obj_cleaned$celltypes))
+rm(seurat_obj)
+```
+
+
+## UMAP celltypes
+```{r fig.width=16, fig.height=10}
+# Clustering overview
+gg_umap_clustering_annot <- DimPlot(object = seurat_obj_cleaned,
+        group.by = "celltypes",
+        repel = TRUE,
+        cols = color_palette
+        ) +
+  labs(title = "Cell types") +
+  guides(color = guide_legend(override.aes = list(size = 5), ncol = 1))
+gg_umap_clustering_annot
+
+ggsave(filename = paste0(path_r_figs, "/FIXnCUT_HumanColon_cryo_clustering_annotation_cleaned_umap.png"),
+       plot = gg_umap_clustering_annot)
+```
+
+Now, we will also explore clusters across sample.
+```{r fig.width=15, fig.height=5}
+DimPlot(
+  object = seurat_obj_cleaned,
+  group.by = "celltypes",
+  split.by = "sample_protocol",
+  label = FALSE,
+  cols = color_palette
+  )
+```
+
+## Cell proportions
+```{r fig.width=12, fig.height=6}
+gg_cell_num <- dittoBarPlot(seurat_obj_cleaned, 
+                            "celltypes",
+                            group.by = "condition",
+                            scale = "count",
+                            retain.factor.levels = TRUE,
+                            legend.show = FALSE,
+                            color.panel = color_palette)
+
+gg_cell_prop <- dittoBarPlot(seurat_obj_cleaned, 
+                             "celltypes",
+                             group.by = "condition",
+                             scale = "percent",
+                            retain.factor.levels = TRUE,
+                             color.panel = color_palette)
+
+gg_cell_num + gg_cell_prop
+```
+
+## Save Seurat object CLEANED
+```{r}
+# Save lineage annotations
+saveRDS(seurat_obj_cleaned$celltypes,
+        paste0(path_r_objects, "/FIXnCUT_HumanColon_cryo_cellsnames_cleaned.rds"))
+
+# Save Seurat object
+saveRDS(seurat_obj_cleaned, paste0(path_r_objects, "/FIXnCUT_HumanColon_cryo_clustering_annotation_cleaned.rds"))
+#seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_HumanColon_cryo_clustering_annotation_cleaned.rds"))
+```
+
+
+# Session Info
+```{r}
+sessionInfo()
+```
