@@ -1,0 +1,111 @@
+---
+title: "Cell-type abundance with scCODA: results"
+author: "Laura Jiménez Gracia"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# Introduction
+
+## Objective
+In this Rmarkdown document, we are going to
+
+# Pre-processing
+## Libraries
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(RColorBrewer)
+```
+
+## Parameters
+Here we will define and load objects and functions that will be used throughout the document.
+```{r}
+# Paths
+path_r_tables <- here::here("04_GEX_analysis/3_cell_composition/results/tables")
+path_r_figs <- here::here("04_GEX_analysis/3_cell_composition/results/figs")
+
+# Functions
+source(here::here("bin/utils.R"))
+
+# Parameters
+comparison_name_list <- c("F-C", "FC-Fixed", "FC-C"
+                          )
+comparison_info_list <- c("MouseLung: F vs C", "MouseLung: F+C vs F", "MouseLung: F+C vs C"
+                            )
+
+```
+
+
+## Load data
+The data used in this Rmarkdown document comes from **SCTEST_33** dataset.
+```{r}
+sccoda_effect_df_list <- purrr::map2(comparison_name_list, 
+                                     comparison_info_list, 
+                                     function(comparison_name, comparison_info){
+  file_path <- paste0(path_r_tables, "/MouseLung_cryo_scCODA_", comparison_name, "_effect.tsv")
+  df <- read.csv(file = file_path, 
+                 sep = "\t")
+  df["comparison_name"] <- comparison_name
+  df["comparison_fraction"] <- sapply(strsplit(comparison_info, ": "), `[`, 1)
+  df["comparison_label"] <- sapply(strsplit(comparison_info, ": "), `[`, 2)
+  df["credible_effects"] <- ifelse(df$Final.Parameter == 0, "False", "True")
+  df
+})
+
+sccoda_effect_global_df <- do.call("rbind", sccoda_effect_df_list)
+
+# Lock plot order making a factor level order
+cells_order <- c("T cells", "NK cells", "Monocytes", "Macrophages Apoe+", 
+                                               "Alveolar Macrophages", "Monocyte-derived DCs", "B cells",
+                                                "Fibroblasts", "Pericytes", "Lymphatic Endothelial cells",
+                                               "Arterial cells", "Vein cells",  "Capillary aerocyte (aCap) cells",
+                                               "Capillary general (gCap) cells", "Bipotent Capillary cells", "Pneumocytes Type I", "Pneumocytes Type II",
+                                               "Club cells", "Cycling cells")
+sccoda_effect_global_df$Cell.Type <- factor(sccoda_effect_global_df$Cell.Type, 
+                                                   levels = rev(cells_order))
+```
+
+
+# Dotplot immune
+```{r fig.height=6, fig.width=7}
+gg_dotplot_effect_glob <- sccoda_effect_global_df %>%
+  filter(comparison_fraction == "MouseLung") %>% 
+    ggplot(aes(
+      x = Cell.Type, 
+      y = comparison_label,
+      color = log2.fold.change, 
+      size = credible_effects)) + 
+    geom_point() + 
+    scale_color_gradient2(low="#4575b4", mid="#ffffbf", high="#d73027", limits = c(-1,1)) +
+    cowplot::theme_cowplot() + 
+    labs(title = "scCODA: MouseLung_cryo",
+         color = "Log2FC",
+         size = "Credible effects") + 
+    theme(axis.ticks = element_blank(),
+          axis.title = element_blank(),
+          axis.line  = element_blank(),
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+          #legend.position = "bottom",
+          legend.text = element_text(size=10))
+
+gg_dotplot_effect_glob
+
+fig_path <- paste0(path_r_figs, "/MouseLung_cryo_scCODA_dotplot_celltype.png")
+ggsave(filename = fig_path, 
+       plot = gg_dotplot_effect_glob)
+```
+
+
+# Session Info
+```{r}
+sessionInfo()
+```

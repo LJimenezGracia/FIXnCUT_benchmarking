@@ -1,0 +1,87 @@
+---
+title: "Cell-type abundance with scCODA: data preparation"
+author: "Laura Jiménez Gracia"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# Introduction
+
+## Objective
+In this Rmarkdown document, we are going to
+
+# Pre-processing
+## Libraries
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(Seurat)
+library(RColorBrewer)
+```
+
+## Parameters
+Here we will define and load objects and functions that will be used throughout the document.
+```{r}
+# Paths
+path_r_objects <- here::here("03_clustering_annotation/results/R_objects")
+path_r_tables_in <- here::here("03_clustering_annotation/results/tables")
+path_r_tables_out <- here::here("04_GEX_analysis/3_cell_composition/results/tables")
+
+# Functions
+source(here::here("bin/utils.R"))
+
+# Parameters
+## Color palette
+color_palette <- Polychrome::createPalette(35, c("#fc6060", "#74f774", "#7c7cfc"))
+names(color_palette) <- NULL
+#Polychrome::swatch(color_palette)
+```
+
+## Load data
+The data used in this Rmarkdown document comes from **FIX** dataset.
+```{r}
+# using cleaned data
+seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_MouseColon_filtered_post_clustering_annotation.rds"))
+seurat_obj_metadata <- seurat_obj@meta.data
+rm(seurat_obj)
+head(seurat_obj_metadata)
+```
+
+
+# Process data for cell-types (Immune cells)
+```{r}
+# Determine the number of cells per cluster per sample
+celltype_prop_df <- seurat_obj_metadata %>% 
+  select(c("sample_protocol", "celltypes")) %>%
+  dplyr::count(celltypes, sample_protocol) %>% # only computing number of cells, not percentages
+  reshape2::dcast(sample_protocol~celltypes) %>% # change rows to columns
+  mutate_if(is.numeric, ~replace(., is.na(.), 0)) # replacing NA by 0
+head(celltype_prop_df)
+
+# celltype_prop_df_metadata <- seurat_obj_metadata %>% 
+#   select(c("donor_id", "genotype", "ablation", "condition")) %>% 
+#   unique()
+# head(celltype_prop_df_metadata)
+# 
+# celltype_counts <- merge(celltype_prop_df, 
+#                          celltype_prop_df_metadata, 
+#                          by="donor_id")
+# head(celltype_counts)
+
+# Exporting cell_counts by cell types
+openxlsx::write.xlsx(celltype_prop_df,
+                     file = paste0(path_r_tables_out, "/FIXnCUT_MouseColon_clustering_annotation_counts.xlsx"))
+```
+
+# Session Info
+```{r}
+sessionInfo()
+```
