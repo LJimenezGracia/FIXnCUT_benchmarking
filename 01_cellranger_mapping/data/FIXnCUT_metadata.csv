@@ -12,3 +12,17 @@ SCGTEST,FIXnCUT,SCGTEST_34,d9dyw64v_o4ypmvlg,247683,CNAG81_fresh,AX4540,cDNA,SC3
 SCGTEST,FIXnCUT,SCGTEST_34,r7nri3n5_f7z94ntj,247684,CNAG81_fixed,AX4541,cDNA,SC3Pv3,8000,not_hashed,Human,PBMC,Healthy,Fix&Cut_24h
 OMNISCOPE,FIXnCUT,OMNISCOPE_39,oa9aj5kk_p76emfj1,253961,lung_fresh_stress,AX9828,cDNA,SC3Pv3,10000,not_hashed,Mouse,Lung,Healthy,Stress_Fresh
 OMNISCOPE,FIXnCUT,OMNISCOPE_39,hxtf5ixx_gg6tqn1j,253962,lung_fixed_stress,AX9829,cDNA,SC3Pv3,10000,not_hashed,Mouse,Lung,Healthy,Stress_Fix&Cut
+OMNISCOPE,FIXnCUT,OMNISCOPE_56,odzpb2d2_z9ge3yl3,262493,Lung_fixed_stressed_1,AY5608,cDNA,SC3Pv3,8000,not_hashed,Mouse,Lung,Healthy,Stress_Fix&Cut
+OMNISCOPE,FIXnCUT,OMNISCOPE_56,jwgdvht9_4srqv2su,262494,Lung_fresh_stressed_1,AY5609,cDNA,SC3Pv3,8000,not_hashed,Mouse,Lung,Healthy,Stress_Fresh
+THREETR,FIXnCUT,THREETR_25,khjw1n3u_vrbz6jve,263147,8281_Kiel,AY5910,cDNA,SC3Pv3,3500,not_hashed,Human,Colon,IBD,Cryopreservation
+THREETR,FIXnCUT,THREETR_25,bp565wvu_orokc6pj,263148,8277_Fix&Cut,AY5911,cDNA,SC3Pv3,3000,not_hashed,Human,Colon,IBD,Cryopreservation+Fixed
+OMNISCOPE,FIXnCUT,OMNISCOPE_58,k7u71sq6_coejfxpy,264030,Lung_fixed_stressed_2,AY7671,cDNA,SC3Pv3,8000,not_hashed,Mouse,Lung,Healthy,Stress_Fix&Cut
+OMNISCOPE,FIXnCUT,OMNISCOPE_58,bejg7fy9_e2qbpk6b,264031,Lung_fresh_stressed_2,AY7672,cDNA,SC3Pv3,8000,not_hashed,Mouse,Lung,Healthy,Stress_Fresh
+SALAS,FIXnCUT,SALAS_47,uk9k4xmo_2cs3yee4,265453,FIX-1,AY7833,cDNA,SC3Pv3,6000,not_hashed,Human,Colon,IBD,Fresh
+SALAS,FIXnCUT,SALAS_47,w3scia4d_xs43wycd,265454,FIX-2,AY7834,cDNA,SC3Pv3,6000,not_hashed,Human,Colon,IBD,Fix&Cut_24h
+SALAS,FIXnCUT,SALAS_47,jmzdj55q_rjh7l6dn,265455,FIX-3,AY9409,cDNA,SC3Pv3,6000,not_hashed,Human,Colon,IBD,Fix&Cut+Cryopreservation
+THREETR,FIXnCUT,THREETR_26,kfibzo2t_gn66h3u1,267008,ORIENT_127_fixed,AZ1384,cDNA,SC3Pv3,2000,not_hashed,Human,Lung,,Fix&Cut+Cryopreservation
+THREETR,FIXnCUT,THREETR_27,drqqjzym_3c2ryvzv,269365,Human colon_fresh,AZ2960,cDNA,SC3Pv3,7000,not_hashed,Human,Colon,IBD,Fresh
+THREETR,FIXnCUT,THREETR_27,vy7zj9cf_acmeyhd6,269366,Human colon_fixed,AZ2961,cDNA,SC3Pv3,7000,not_hashed,Human,Colon,IBD,Fix&Cut_24h
+THREETR,FIXnCUT,THREETR_27,xj1wbujr_xv3enf58,269367,Human colon_cryopreserved,AZ3030,cDNA,SC3Pv3,7000,not_hashed,Human,Colon,IBD,Cryopreservation
+THREETR,FIXnCUT,THREETR_27,o5p4sf2u_vwljz9k4,269368,Human colon_fixed_cryopreserved,AZ3031,cDNA,SC3Pv3,7000,not_hashed,Human,Colon,IBD,Fix&Cut+Cryopreservation
