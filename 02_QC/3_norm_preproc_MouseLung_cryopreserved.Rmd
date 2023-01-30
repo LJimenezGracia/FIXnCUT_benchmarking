@@ -1,5 +1,5 @@
 ---
-title: "Data normalization and pre-processing: mouse_LUNG_healthy"
+title: "Data normalization and pre-processing: MouseLung_cryopreserved"
 author: "Laura Jiménez Gracia"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -39,14 +39,10 @@ path_r_objects <- here::here("02_QC/results/R_objects")
 source(here::here("bin/utils.R"))
 
 # Parameters
-confounder_variables <- c("library_name", "sample_protocol")
+confounder_variables <- c("library_name", "sample_protocol", "replicate")
 confounder_names <- c("Library", "Sample Protocol")
-
-metadata_variables_confounder <- c("nCount_RNA", "nFeature_RNA", "gem_id", 
-                                   "pct_mt", "pct_rb", "Phase",
-                                   "library_name", "sample_protocol")
-
 inferno_color_palette <- viridis::inferno(10)
+color_conditions <- c("#66C2A5", "#8DA0CB", "#E78AC3")
 ```
 
 ## Load data
@@ -54,18 +50,31 @@ The data used in this Rmarkdown document comes from **SCGTEST_33** dataset.
 ```{r}
 # Load all metadata information
 metadata <- read.csv(path_project_metadata)
+subproject_folder_n <- "MouseLung_cryopreserved"
 
 # Merging metadata tables
 metadata <- metadata %>% 
-  filter(subproject == "SCGTEST_33" & tissue == "Lung")
+  filter(subproject == "SCGTEST_33"
+         & tissue == "Lung"
+         & ( library_name != "Lung_fresh" & library_name != "Lung_fixed_7days"))
+
+# Modify metadata
+metadata$library_name[metadata$library_name == "Lung_fixed_24h"] <- "Fixed"
+metadata$library_name[metadata$library_name == "Lung_cryo"] <- "Cryopreserved"
+metadata$library_name[metadata$library_name == "Lung_fixed_cryo"] <- "Fixed+Cryopreserved"
+
+metadata$sample_protocol <- metadata$library_name
 
 print("Libraries/Samples metadata")
 DT::datatable(metadata, options = list(scrollX = TRUE))
 
 # Load Seurat object
-seurat_obj <- readRDS(paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_filtered.rds"))
+seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_MouseLung_cryopreserved_filtered.rds"))
+seurat_obj$library_name <- factor(x = seurat_obj$library_name, levels = c("Fixed", "Cryopreserved", "Fixed+Cryopreserved"))
+seurat_obj$sample_protocol <- factor(x = seurat_obj$sample_protocol, levels = c("Fixed", "Cryopreserved", "Fixed+Cryopreserved"))
 seurat_obj
 ```
+
 
 ## Explore QC results
 Here, we show an overview of the scRNA-seq data obtained after the quality control.
@@ -101,17 +110,14 @@ seurat_obj[["RNA"]]@data[1:10, 1:20]
 ```
 
 ## Computing cell cycle score
-To assess cell cycle effects in the next steps, it is important to compute the cell cycle score once the data is normalized. To do so, we will assign each cell a score based on its expression of G2/M and S phase markers. The .RData file containing mouse cell cycle marker genes has been generated with `generate_cellcycle_markergenes_mouse.Rmd` script. This value will be stored in the Seurat metadata, and we will analyze it after the dimensionality reduction step is performed.
+To assess cell cycle effects in the next steps, it is important to compute the cell cycle score once the data is normalized. To do so, we will assign each cell a score based on its expression of G2/M and S phase markers. This value will be stored in the Seurat metadata, and we will analyze it after the dimensionality reduction step is performed.
 
 ```{r}
-# Load mouse cell_cycle marker genes
-load("/mnt/cnagclus/projects/reference_data/cellcycle_markergenes_mouse.Rdata")
-
 # Testing for cell_cycle effects
 seurat_obj <- CellCycleScoring(
   seurat_obj,
-  s.features = mouse_cellcycle_genes$mouse_s_genes,
-  g2m.features = mouse_cellcycle_genes$mouse_g2m_genes)
+  s.features = cc.genes$s.genes,
+  g2m.features = cc.genes$g2m.genes)
 ```
 
 
@@ -123,6 +129,42 @@ Next, we will filter a subset of features that exhibit high cell-to-cell variati
 summary(Matrix::colSums(seurat_obj@assays$RNA@data[, ] > 0))
 ```
 
+
+## Independent HVF
+```{r fig.height=5, fig.width=10}
+seurat_obj_list <- SplitObject(seurat_obj, split.by = "library_name")
+
+# Fresh HVG -- # union ~3800 genes by sample_protocol
+seurat_obj_list$Fixed <- FindVariableFeatures(seurat_obj_list$Fixed, nfeatures = 3000)
+fixed_HVG <- VariableFeatures(seurat_obj_list$Fixed)
+
+seurat_obj_list$Cryopreserved <- FindVariableFeatures(seurat_obj_list$Cryopreserved, nfeatures = 3000)
+cryo_HVG <- VariableFeatures(seurat_obj_list$Cryopreserved)
+
+# Fix&Cut HVG -- # union ~3800 genes by sample_protocol
+seurat_obj_list$`Fixed+Cryopreserved` <- FindVariableFeatures(seurat_obj_list$`Fixed+Cryopreserved`, nfeatures = 3000)
+fixedcryo_HVG <- VariableFeatures(seurat_obj_list$`Fixed+Cryopreserved`)
+
+
+UpSetR::upset(
+  UpSetR::fromList(list(
+    "Fixed" = fixed_HVG,
+    "Cryopreserved" = cryo_HVG,
+    "Fixed+Cryopreserved" = fixedcryo_HVG
+  )),
+  nsets = 6,
+  order.by = "freq",
+  #group.by = "sets",
+  mainbar.y.label = "# HVG", sets.x.label = "# HVG / Library",
+  point.size = 4, line.size = 1,
+  empty.intersections = "on",
+  queries = list(
+     list(query = UpSetR::intersects, params = list("Fixed", "Cryopreserved", "Fixed+Cryopreserved"), color = "green", active = T) )
+)
+```
+
+
+## Common HVF
 ```{r fig.width=7, fig.height=5}
 # Identify highly variable features
 seurat_obj <- FindVariableFeatures(
@@ -138,6 +180,7 @@ LabelPoints(VariableFeaturePlot(seurat_obj),
             points = top20_hvf,
             repel = TRUE)
 ```
+
 
 Moreover, we will also apply a linear transformation `scaling` prior to dimensional reduction to avoid highly-expressed genes to dominate in the analysis. The scaling step shifts the expression of each gene, so that the mean expression across cells is 0 and the variance is 1.
 ```{r}
@@ -159,26 +202,20 @@ seurat_obj <- RunPCA(
 ```
 
 After applying PCA, we will ensure that the first PCs capture cell-to-cell variability and not differences associated to batch-effects or by cell cycle phase.
-```{r fig.width=15, fig.height=5}
-gg_pca_by_library <- DimPlot(
-  seurat_obj,
-  reduction = "pca",
-  group.by = "library_name") +
-  labs(title = "", color = "Library")
 
-gg_pca_by_sample <- DimPlot(
+```{r fig.width=7, fig.height=5}
+DimPlot(
   seurat_obj,
   reduction = "pca",
   group.by = "sample_protocol") +
-  labs(title = "", color = "Sample")
-
-gg_pca_by_library + gg_pca_by_sample
+    scale_color_manual(values=color_conditions) +
+  labs(title = "", color = "")
 ```
-
 
 
 ```{r}
 # Get % variance of PC
+
 mat <- Seurat::GetAssayData(seurat_obj, assay = "RNA", slot = "scale.data")
 pca <- seurat_obj[["pca"]]
 
@@ -195,7 +232,6 @@ plot(x = seq(1:50),
      y = varExplained)
 ```
 
-
 ```{r fig.width=12, fig.height=5}
 # Visualize the PCA reduction, grouping by cell cycle phase
 gg_pca_by_cellcycle <- DimPlot(
@@ -207,6 +243,7 @@ gg_pca_by_cellcycle <- DimPlot(
 
 gg_pca_by_cellcycle
 ```
+
 Based on the previous plots, we do not observe significant batch-effects neither cell cycle phase effects. Thus, we would not regress out the variation due to cell cycle because there is no effect.
 
 At this point, we will determine how many PCs should be considered for data visualization in 2 dimensions and for the downstream cluster analysis. It important to ensure that we are capturing the majority of the variation (or cell types) present in our dataset.
@@ -216,7 +253,8 @@ At this point, we will determine how many PCs should be considered for data visu
 ElbowPlot(seurat_obj, ndims = 50, reduction = "pca")
 ```
 
-In this particular dataset, we will use the first 30 PCs to visualize data and perform the clustering.
+In this particular dataset, we will use the first 20 PCs to visualize data and perform the clustering.
+
 
 # Data visualization
 For visualization purposes, it is standard practice to use the Uniform Approximation and Projection method (UMAP), which is a non-linear dimensionality reduction method that reduce the data dimensionality into a 2-dimension space.
@@ -224,26 +262,19 @@ For visualization purposes, it is standard practice to use the Uniform Approxima
 ```{r}
 # Run UMAP
 seurat_obj <- seurat_obj %>% 
-  RunUMAP(reduction = "pca", dims = 1:30)
+  RunUMAP(reduction = "pca", dims = 1:20)
 ```
 
 ## Assessing confounder variables
-
-```{r fig.width=14, fig.height=5}
+```{r fig.width=7, fig.height=5}
 # Visualizing UMAP
-gg_umap_uncorrected <- purrr::map2(confounder_variables, confounder_names,
-                                          function(confounder, title) {
-  p <- DimPlot(seurat_obj, 
+DimPlot(seurat_obj, 
                reduction = "umap",
-               group.by = confounder,
+               group.by = "library_name",
                pt.size = 0.01) +
-    labs(title=title) +
-    scale_color_brewer(palette = "Paired")
-  p
-})
-
-cowplot::plot_grid(plotlist = gg_umap_uncorrected, ncol = 2)
+    scale_color_manual(values = color_conditions)
 ```
+
 
 Here, from the UMAP mapping, we cannot see the presence of library-specific effects that should not be present. But, we clearly see treatment/disease differences. Thus, we will integrate the different samples to harmonize these cells.
 
@@ -280,19 +311,37 @@ gg_qc_umap
 ```
 
 
-## Assessing multiple confounder variables
+Finally, we'll also check for the doublet score and doublet prediction obtained using `scrublet`.
+```{r fig.width=14, fig.height=5}
+gg_doubletscore_umap <- FeaturePlot(
+  seurat_obj,
+  reduction = "umap",
+  features = "scrublet_doublet_scores",
+    cols = c("lightgray", "darkblue"),
+  order = TRUE)
 
-```{r fig.width=20, fig.height=5}
+gg_doubletpred_umap <- DimPlot(
+  seurat_obj,
+  reduction = "umap",
+  group.by = "scrublet_predicted_doublet")
+
+cowplot::plot_grid(gg_doubletscore_umap,
+                   gg_doubletpred_umap, ncol = 2)
+```
+
+
+## Assessing multiple confounder variables
+```{r fig.width=14, fig.height=5}
 # Multiple metadata variables
 DimPlot(
   seurat_obj,
-  group.by = "library_name",
+  group.by = "sample_protocol",
   split.by = "sample_protocol",
   pt.size = 0.2
   ) +
-  labs(title = "library_name",
-       color = "sample_protocol") +
-  scale_color_brewer(palette = "Set2")
+  labs(title = "",
+       color = "") + NoLegend() +
+  scale_color_manual(values = color_conditions)
 ```
 
 
@@ -303,7 +352,7 @@ FeaturePlot(seurat_obj,
             features = c("Ptprc", # CD45+, immune cells
                          "Cd3d", # T cells
                          "Cd4", "Foxp3", # CD4+ T cells, Treg
-                         "Cd8b1", "Nkg7", # CD8+ T cells, cytotoxic
+                         "Cd8a", "Nkg7", # CD8+ T cells, cytotoxic
                          "Klrb1c", # NK cells
                          "Cd19", "Cd79a", # B cells
                          "Ms4a1", "Jchain", # Naive vs Plasma cells
@@ -317,8 +366,6 @@ FeaturePlot(seurat_obj,
             ncol = 6) &
   scale_colour_gradientn(colours = inferno_color_palette)
 ```
-
-
 ```{r fig.width=20, fig.height=10}
 # Non-immune fraction
 FeaturePlot(seurat_obj,
@@ -337,161 +384,27 @@ FeaturePlot(seurat_obj,
   scale_colour_gradientn(colours = inferno_color_palette)
 ```
 
-
-
-# Save processed Seurat objects
-```{r}
-# Save processed lognorm Seurat object
-saveRDS(seurat_obj, paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_lognorm_processed.rds"))
-#seurat_obj <- readRDS(paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_lognorm_processed.rds"))
-```
-
-
-# Integration with harmony
-The integration approach was carried out with [Harmony](https://www.nature.com/articles/s41592-019-0619-0). [Chazarra-Gil *et al*](https://www.biorxiv.org/content/10.1101/2020.05.22.111211v2), which was reported to be among the best scRNA-seq integration methods, especially in terms of scalability, in a recent integration benchmarking study.
-```{r}
-seurat_obj_integrated <- seurat_obj %>%
-  harmony::RunHarmony(group.by.vars = c("library_name"))
-
-# Elbowplot to select relevant PCs to analyse the dataset
-ElbowPlot(seurat_obj_integrated, ndims = 50, reduction = "harmony")
-
-# Dimensionality reduction
-seurat_obj_integrated <- seurat_obj_integrated %>%
-  RunUMAP(reduction = "harmony", dims = 1:30)
-```
-
-## Assessing confounder variables
-```{r fig.width=14, fig.height=5}
-# Visualizing UMAP
-gg_umap_harmony_confounders <- purrr::map2(confounder_variables, confounder_names,
-                                          function(confounder, title) {
-  p <- DimPlot(seurat_obj_integrated,
-               reduction = "umap",
-               group.by = confounder,
-               pt.size = 0.01) +
-    labs(title=title) +
-    scale_color_brewer(palette = "Paired")
-  p
-})
-
-cowplot::plot_grid(plotlist = gg_umap_harmony_confounders, ncol = 2)
-```
-
-## Assessing cell cycle effects
-```{r fig.width=7, fig.height=5}
-gg_umap_harmony_cycle <- DimPlot(
-  seurat_obj_integrated,
-  reduction = "umap",
-  group.by = "Phase",
-  pt.size = 0.01) +
-  labs(color = "Cell Cycle Phase")
-
-gg_umap_harmony_cycle
-```
-
-## Assessing sources of uninterested variation
-Next we will explore additional metrics, such as the number of UMIs and genes per cell, S-phase and G2M-phase markers, and mitochondrial / ribosomal gene expression on the UMAP embedding. Finally, we will also check the scrublet doublet score.
-```{r fig.width=14, fig.height=15}
-gg_umap_harmony_qc <- FeaturePlot(
-  seurat_obj_integrated,
-  reduction = "umap",
-  features = qc_metrics,
-  order = TRUE,
-  ncol = 2)
-
-gg_umap_harmony_qc
-```
-
-
-## Assessing multiple confounder variables
-```{r fig.width=20, fig.height=5}
-# Multiple metadata variables
-DimPlot(
-  seurat_obj_integrated,
-  group.by = "library_name",
-  split.by = "sample_protocol",
-  pt.size = 0.2
-  ) +
-  labs(title = "library_name",
-       color = "sample_protocol") +
-  scale_color_brewer(palette = "Set2")
-```
-
-
-## Assessing gene markers expression
-```{r fig.width=30, fig.height=15}
-inferno_color_palette <- viridis::inferno(10)
-
-# Immune fraction
-FeaturePlot(seurat_obj_integrated,
-            features = c("Ptprc", # CD45+, immune cells
-                         "Cd3d", # T cells
-                         "Cd4", "Foxp3", # CD4+ T cells, Treg
-                         "Cd8b1", "Nkg7", # CD8+ T cells, cytotoxic
-                         "Klrb1c", # NK cells
-                         "Cd19", "Cd79a", # B cells
-                         "Ms4a1", "Jchain", # Naive vs Plasma cells
-                         "Lyz", "Cd14", "Plac8", "Cd68", # Mono/macro
-                         "Itgax", "Mertk", "Siglecf", "Marco", # Alveolar macrophages
-                         "S100a8", "S100a9", # Neutrophils
-                         "Cd200r3", # Mast cells
-                         "H2-Aa" # MHC- antigen presenting
-                         ),
-            order = T,
-            ncol = 6) &
-  scale_colour_gradientn(colours = inferno_color_palette)
-```
-
-
-```{r fig.width=35, fig.height=20}
-# Non-immune fraction
-FeaturePlot(seurat_obj_integrated,
-            features = c("Epcam", # Epithelial cells
-                        "Pecam1", "Lyve1", # Endothelial cells
-                        "Car4", # Pulmonary Endothelial cells 
-                        "Vegfc", "Prox1", # Venous / Lymphatic Endothelial cells 
-                         "Col1a1", # Stromal cells
-                         "Krt5", # Basal cells
-                        "Hopx", "Rtkn2", "Ager", "Cav1", "Emp2", # Pneumocytes Type I
-                         "Sftpb", "Sftpc", "Sftpd", "Lamp3", "Napsa", "Sftpa1", # Pneumocytes Type II
-                         "Tuba1a", # Ciliated cells
-                        "Scgb1a1", "Bpifb1", "Muc15", "Scgb3a1",  # Club cells /  Clara cells
-                        "Cd24a", "Foxj1", # Ciliated columnar tracheobronchial cells or Ciliated epithelium
-                        "Muc5ac",  # Goblet cells, columnar epithelial cells
-                        "Pdgfrb", # Axin2+ myofibroblast progenitors (AMPs)
-                        "Acta2", "Actg2", "Cnn1", #Smooth muscle,
-                        "Wt1" # mesothelium
-                         ),
-            order = T,
-            ncol = 6) &
-  scale_colour_gradientn(colours = inferno_color_palette)
-```
-
-# Save processed Seurat objects
-```{r}
-# Save processed lognorm Seurat object
-saveRDS(seurat_obj_integrated, paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_lognorm_harmony_processed.rds"))
-#seurat_obj_integrated <- readRDS(paste0(path_r_objects, "/scgtest33_m_LUNG_healthy_lognorm_harmony_processed.rds"))
-```
-
-
+## Low quality genes (Hbb, Hba)
 ```{r fig.width=20, fig.height=10}
-# Low quality genes (Hbb, Hba)
-FeaturePlot(seurat_obj_integrated,
-            features = c("Hbb-bs", "Hba-a1", "Hba-a2", "Hbb-bt"),
-            split.by = "sample_protocol",
+FeaturePlot(seurat_obj,
+            features = c("Hbb-bs", "Hba-a1", "Hba-a2"),
+            split.by = "library_name",
             order = T,
             ncol = 3) &
   scale_colour_gradientn(colours = inferno_color_palette)
+
+VlnPlot(seurat_obj,
+        group.by = "library_name",
+        features = c("Hbb-bs", "Hba-a1", "Hba-a2"),
+        ncol = 3)
 ```
 
 
-```{r fig.width=20, fig.height=5}
-VlnPlot(seurat_obj_integrated,
-        group.by = "sample_protocol",
-            features = c("Hbb-bs", "Hba-a1", "Hba-a2", "Hbb-bt"),
-        ncol = 4)
+# Save processed Seurat objects
+```{r}
+# Save processed lognorm Seurat object
+saveRDS(seurat_obj, paste0(path_r_objects, "/FIXnCUT_MouseLung_cryopreserved_lognorm_processed.rds"))
+#seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_MouseLung_cryopreserved_lognorm_processed.rds"))
 ```
 
 

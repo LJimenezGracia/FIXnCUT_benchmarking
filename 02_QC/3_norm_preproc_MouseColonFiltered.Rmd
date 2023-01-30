@@ -1,0 +1,611 @@
+---
+title: "Data normalization and pre-processing: MouseColon_filtered"
+author: "Laura Jiménez Gracia"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# Introduction
+Following with the results obtained in the previous notebook, we will now perform other pre-processing steps, such as data normalization, feature selection, scaling, dimensionality reduction, and data visualization prior to batch-effect correction (data integration). To do so, we will follow the current best practices for scRNA-seq QC described in [Luecken al. Mol Syst Biol (2018)](https://doi.org/10.15252/msb.20188746) and adapt some workflows from [Satija Lab](https://satijalab.org/seurat/vignettes.html).
+
+## Objective
+In this Rmarkdown document, we are going to perform the previous pre-processing steps.
+
+# Pre-processing
+## Libraries
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(Seurat)
+library(gt)
+library(harmony)
+```
+
+## Parameters
+Here we will define and load objects and functions that will be used throughout the document.
+```{r}
+# Paths
+path_project_metadata <- here::here("01_cellranger_mapping/data/FIXnCUT_metadata.csv")
+path_r_objects <- here::here("02_QC/results/R_objects")
+
+# Functions
+source(here::here("bin/utils.R"))
+
+# Parameters
+confounder_variables <- c("library_name", "sample_protocol")
+confounder_names <- c("Library", "Sample Protocol")
+inferno_color_palette <- viridis::inferno(10)
+```
+
+## Load data
+The data used in this Rmarkdown document comes from **THREETR_27** dataset.
+```{r}
+# Load all metadata information
+metadata <- read.csv(path_project_metadata)
+
+# Merging metadata tables
+metadata <- metadata %>% 
+  filter(subproject == "SCGTEST_32"
+         & tissue == "Colon")
+
+# Modify metadata
+metadata$library_name[metadata$library_name == "Colon_fresh"] <- "Fresh"
+metadata$library_name[metadata$library_name == "Colon_fixed_24h"] <- "Fixed"
+
+print("Libraries/Samples metadata")
+DT::datatable(metadata, options = list(scrollX = TRUE))
+
+# Load Seurat object
+seurat_obj_epi <- readRDS(paste0(path_r_objects, "/FIXnCUT_MouseColonEpithelial_filtered.rds"))
+seurat_obj_Nepi <- readRDS(paste0(path_r_objects, "/FIXnCUT_MouseColonNonEpithelial_filtered.rds"))
+seurat_obj <- merge(seurat_obj_epi, seurat_obj_Nepi)
+seurat_obj
+
+seurat_obj$library_name <- factor(x = seurat_obj$library_name, levels = c("Fresh", "Fixed"))
+seurat_obj$sample_protocol <- factor(x = seurat_obj$sample_protocol, levels = c("Fresh", "Fixed"))
+```
+
+## Explore QC results
+Here, we show an overview of the scRNA-seq data obtained after the quality control.
+```{r}
+table_qc_gex(seurat_obj@meta.data, subtitle = "After cell QC filtering out")
+```
+
+```{r fig.height=5, fig.width=14}
+gg_qc_by_gemid <- VlnPlot(seurat_obj,
+                          features = c("nCount_RNA", "nFeature_RNA",
+                                       "pct_mt"),
+                          group.by = "library_name",
+                          pt.size = 0,
+                          ncol = 3
+                          )
+
+gg_qc_by_gemid
+```
+
+# Data normalization
+Count depths for identical cells can be different due to the variability inherent in the capture, RT and sequencing of a mRNA molecule. Thus, to avoid detecting gene expression differences based on count data when comparing cells we will apply a global-scaling normalization by sequencing depth. 
+
+This method divides the feature expression measurements (each count) by the library size of the cell (total number of UMIs), multiplies this by a scale factor (10,000) and log-transforms it.
+
+```{r}
+# Normalization
+seurat_obj <- NormalizeData(
+  seurat_obj,
+  normalization.method = "LogNormalize",
+  scale.factor = 10000)
+
+seurat_obj[["RNA"]]@data[1:10, 1:20]
+```
+
+## Computing cell cycle score
+To assess cell cycle effects in the next steps, it is important to compute the cell cycle score once the data is normalized. To do so, we will assign each cell a score based on its expression of G2/M and S phase markers. This value will be stored in the Seurat metadata, and we will analyze it after the dimensionality reduction step is performed.
+
+```{r}
+# Testing for cell_cycle effects
+seurat_obj <- CellCycleScoring(
+  seurat_obj,
+  s.features = cc.genes$s.genes,
+  g2m.features = cc.genes$g2m.genes)
+```
+
+
+# Feature selection and data scaling
+Next, we will filter a subset of features that exhibit high cell-to-cell variation to keep only highly variable genes that are “informative” of the variability in the dataset, which will be further used in downstream analysis.
+
+```{r}
+# Summary statistics of the number of features (genes) by cell
+summary(Matrix::colSums(seurat_obj@assays$RNA@data[, ] > 0))
+```
+
+
+## Independent HVF
+```{r fig.height=5, fig.width=10}
+seurat_obj_list <- SplitObject(seurat_obj, split.by = "library_name")
+
+# Fresh HVG
+seurat_obj_list$Fresh <- FindVariableFeatures(seurat_obj_list$Fresh, nfeatures = 3000)
+fresh_HVG <- VariableFeatures(seurat_obj_list$Fresh)
+
+# Fix&Cut HVG
+seurat_obj_list$Fixed <- FindVariableFeatures(seurat_obj_list$Fixed, nfeatures = 3000)
+fixed_HVG <- VariableFeatures(seurat_obj_list$Fixed)
+
+UpSetR::upset(
+  UpSetR::fromList(list(
+    "Fresh" = fresh_HVG,
+    "Fixed" = fixed_HVG
+  )),
+  nsets = 6,
+  order.by = "freq",
+  #group.by = "sets",
+  mainbar.y.label = "# HVG", sets.x.label = "# HVG / Library",
+  point.size = 4, line.size = 1,
+  empty.intersections = "on",
+  queries = list(
+     list(query = UpSetR::intersects, params = list("Fresh", "Fixed"), color = "green", active = T) )
+)
+```
+
+## Common HVF
+```{r fig.width=7, fig.height=5}
+# Identify highly variable features
+seurat_obj <- FindVariableFeatures(
+  seurat_obj,
+  nfeatures = 3000)
+
+# Identify the 20 most highly variable genes
+top20_hvf <- head(VariableFeatures(seurat_obj), 20)
+top20_hvf
+
+# Plot variable features
+LabelPoints(VariableFeaturePlot(seurat_obj),
+            points = top20_hvf,
+            repel = TRUE)
+```
+
+
+Moreover, we will also apply a linear transformation `scaling` prior to dimensional reduction to avoid highly-expressed genes to dominate in the analysis. The scaling step shifts the expression of each gene, so that the mean expression across cells is 0 and the variance is 1.
+```{r}
+# Scaling
+seurat_obj <- ScaleData(seurat_obj)
+```
+
+# Dimensionality reduction
+Next, we will perform a linear dimensionality reduction using the `PCA` algorithm to reduce the high-dimension of data (we have many genes, and some of them are redundant).
+```{r fig.width=7, fig.height=5}
+# Run PCA
+seurat_obj <- RunPCA(
+  seurat_obj,
+  ndims.print = 1:6,
+  nfeatures.print = 10)
+
+# Visualizing PCA results
+# VizDimLoadings(seurat_obj, dims = 1:2, reduction = "pca")
+```
+
+After applying PCA, we will ensure that the first PCs capture cell-to-cell variability and not differences associated to batch-effects or by cell cycle phase.
+```{r fig.width=7, fig.height=5}
+DimPlot(
+  seurat_obj,
+  reduction = "pca",
+  group.by = "library_name") +
+    scale_color_brewer(palette = "Set2") +
+  labs(title = "", color = "")
+```
+
+
+```{r}
+# Get % variance of PC
+
+mat <- Seurat::GetAssayData(seurat_obj, assay = "RNA", slot = "scale.data")
+pca <- seurat_obj[["pca"]]
+
+# Get the total variance:
+total_variance <- sum(matrixStats::rowVars(mat))
+
+eigValues = (pca@stdev)^2  ## EigenValues
+varExplained = eigValues / total_variance * 100
+
+names(varExplained) <- colnames(pca)
+print(varExplained)
+
+plot(x = seq(1:50),
+     y = varExplained)
+```
+
+```{r fig.width=12, fig.height=5}
+# Visualize the PCA reduction, grouping by cell cycle phase
+gg_pca_by_cellcycle <- DimPlot(
+  seurat_obj,
+  reduction = "pca",
+  group.by = "Phase",
+  split.by = "Phase",
+  pt.size = 0.01) + NoLegend()
+
+gg_pca_by_cellcycle
+```
+
+Based on the previous plots, we do not observe significant batch-effects neither cell cycle phase effects. Thus, we would not regress out the variation due to cell cycle because there is no effect.
+
+At this point, we will determine how many PCs should be considered for data visualization in 2 dimensions and for the downstream cluster analysis. It important to ensure that we are capturing the majority of the variation (or cell types) present in our dataset.
+
+```{r fig.width=7, fig.height=5}
+# Elbowplot to select relevant PCs to analyse the dataset
+ElbowPlot(seurat_obj, ndims = 50, reduction = "pca")
+```
+
+In this particular dataset, we will use the first 20 PCs to visualize data and perform the clustering.
+
+
+# Data visualization
+For visualization purposes, it is standard practice to use the Uniform Approximation and Projection method (UMAP), which is a non-linear dimensionality reduction method that reduce the data dimensionality into a 2-dimension space.
+
+```{r}
+# Run UMAP
+seurat_obj <- seurat_obj %>% 
+  RunUMAP(reduction = "pca", dims = 1:20)
+```
+
+## Assessing confounder variables
+
+```{r fig.width=7, fig.height=5}
+# Visualizing UMAP
+DimPlot(seurat_obj, 
+               reduction = "umap",
+               group.by = "library_name",
+               pt.size = 0.01) +
+    scale_color_brewer(palette = "Set2") +
+    labs(title = "", color = "")
+```
+
+Here, from the UMAP mapping, we cannot see the presence of library-specific effects that should not be present. But, we clearly see treatment/disease differences. Thus, we will integrate the different samples to harmonize these cells.
+
+## Assessing cell cycle effects
+```{r fig.width=7, fig.height=5}
+gg_umap_by_phase <- DimPlot(
+  seurat_obj,
+  reduction = "umap",
+  group.by = "Phase",
+  pt.size = 0.01) +
+  labs(color = "Cell Cycle Phase")
+
+gg_umap_by_phase
+```
+Finally, we ensure that there is no batch effect associated to the cell cycle phase.
+
+
+## Assessing sources of uninterested variation
+Next we will explore additional metrics, such as the number of UMIs and genes per cell, S-phase and G2M-phase markers, and mitochondrial / ribosomal gene expression on the UMAP embedding. Finally, we will also check the scrublet doublet score.
+```{r fig.width=14, fig.height=15}
+# Determine metrics to plot present in seurat_integrated@meta.data
+qc_metrics <-  c("nCount_RNA", "nFeature_RNA", 
+                 "S.Score", "G2M.Score",
+                 "pct_mt", "pct_rb")
+
+gg_qc_umap <- FeaturePlot(
+  seurat_obj,
+  reduction = "umap",
+  features = qc_metrics,
+  order = TRUE,
+  ncol = 2)
+
+gg_qc_umap
+```
+
+
+Finally, we'll also check for the doublet score and doublet prediction obtained using `scrublet`.
+```{r fig.width=14, fig.height=5}
+gg_doubletscore_umap <- FeaturePlot(
+  seurat_obj,
+  reduction = "umap",
+  features = "scrublet_doublet_scores",
+    cols = c("lightgray", "darkblue"),
+  order = TRUE)
+
+gg_doubletpred_umap <- DimPlot(
+  seurat_obj,
+  reduction = "umap",
+  group.by = "scrublet_predicted_doublet")
+
+cowplot::plot_grid(gg_doubletscore_umap,
+                   gg_doubletpred_umap, ncol = 2)
+```
+
+
+## Assessing multiple confounder variables
+
+```{r fig.width=14, fig.height=5}
+# Multiple metadata variables
+DimPlot(
+  seurat_obj,
+  group.by = "library_name",
+  split.by = "library_name",
+  pt.size = 0.2
+  ) +
+  labs(title = "",
+       color = "") + NoLegend() +
+  scale_color_brewer(palette = "Set2")
+```
+
+
+## Assessing gene markers expression
+```{r fig.width=30, fig.height=15}
+# Immune fraction
+FeaturePlot(seurat_obj,
+            features = c("Ptprc", # CD45+, immune cells
+                         "Cd3d", # T cells
+                         "Cd4", "Foxp3", # CD4+ T cells, Treg
+                         "Cd8a", "Nkg7", # CD8+ T cells, cytotoxic
+                         "Klrb1c", # NK cells
+                         "Cd19", "Cd79a", # B cells
+                         "Ms4a1", "Jchain", # Naive vs Plasma cells
+                         "Lyz", "Cd14", "Plac8", "Cd68", # Mono/macro
+                         "Itgax", "Mertk", "Siglecf", "Marco", # Alveolar macrophages
+                         "S100a8", "S100a9", # Neutrophils
+                         "Cd200r3", # Mast cells
+                         "H2-Aa" # MHC- antigen presenting
+                         ),
+            order = T,
+            ncol = 6) &
+  scale_colour_gradientn(colours = inferno_color_palette)
+```
+
+
+```{r fig.width=25, fig.height=15}
+# Non-immune fraction
+FeaturePlot(seurat_obj,
+            features = c("Epcam", "Krt", "Krt18", # Epithelial cells
+                        "Pecam1", "Lyve1", # Endothelial cells
+                        "Lypd8", "Lgals4", # Intestinal cells
+                        "Dpt", "Ly6a", "Pi16", # Univ Fibroblasts
+                        "Clu", "Slpi", # Mesothelial cells
+                        "Rgs5", "Acta2", # Pericytes
+                        "Bmp4", "Bmp5", # Telocytes
+                        "Cfd", "Car3" # Adipocytes
+                         ),
+            order = T,
+            ncol = 5) &
+  scale_colour_gradientn(colours = inferno_color_palette)
+```
+
+## Low quality genes (Hbb, Hba)
+```{r fig.width=10, fig.height=10}
+FeaturePlot(seurat_obj,
+            features = c("Hbb-bs", "Hba-a1", "Hba-a2"),
+            split.by = "library_name",
+            order = T,
+            ncol = 3) &
+  scale_colour_gradientn(colours = inferno_color_palette)
+
+VlnPlot(seurat_obj,
+        group.by = "library_name",
+        features = c("Hbb-bs", "Hba-a1", "Hba-a2"),
+        ncol = 3)
+```
+
+
+# Save processed Seurat objects
+```{r}
+# Save processed lognorm Seurat object
+saveRDS(seurat_obj, paste0(path_r_objects, "/FIXnCUT_MouseColon_filtered_lognorm_processed.rds"))
+#seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_MouseColon_filtered_lognorm_processed.rds"))
+```
+
+# Integration
+```{r}
+# Harmony integration
+seurat_obj_integrated <- seurat_obj %>%
+  RunHarmony(group.by.vars = "gem_id")
+
+rm(seurat_obj)
+```
+
+After applying Harmony, we will ensure that the first harmony PCs capture cell-to-cell variability and not differences associated to batch-effects or by cell cycle phase.
+
+```{r fig.width=7, fig.height=5}
+DimPlot(
+  seurat_obj_integrated,
+  reduction = "harmony",
+  group.by = "library_name") +
+    scale_color_brewer(palette = "Set2") +
+  labs(title = "", color = "")
+```
+
+
+```{r}
+# Get % variance of PC
+
+mat <- Seurat::GetAssayData(seurat_obj_integrated, assay = "RNA", slot = "scale.data")
+pca <- seurat_obj_integrated[["harmony"]]
+
+# Get the total variance:
+total_variance <- sum(matrixStats::rowVars(mat))
+
+eigValues = (pca@stdev)^2  ## EigenValues
+varExplained = eigValues / total_variance * 100
+
+names(varExplained) <- colnames(pca)
+print(varExplained)
+
+plot(x = seq(1:50),
+     y = varExplained)
+```
+
+```{r fig.width=12, fig.height=5}
+# Visualize the PCA reduction, grouping by cell cycle phase
+gg_pca_by_cellcycle <- DimPlot(
+  seurat_obj_integrated,
+  reduction = "harmony",
+  group.by = "Phase",
+  split.by = "Phase",
+  pt.size = 0.01) + NoLegend()
+
+gg_pca_by_cellcycle
+```
+
+
+In this particular dataset, we will use the first 20 harmony PCs to visualize data and perform the clustering.
+```{r}
+# Processing integrated assay
+seurat_obj_integrated <- seurat_obj_integrated %>%
+  RunUMAP(reduction = "harmony", dims = 1:20)
+```
+
+## Assessing confounder variables
+
+```{r fig.width=7, fig.height=5}
+# Visualizing UMAP
+DimPlot(seurat_obj_integrated, 
+               reduction = "umap",
+               group.by = "library_name",
+               pt.size = 0.01) +
+    scale_color_brewer(palette = "Set2") +
+    labs(title = "", color = "")
+```
+
+Here, from the UMAP mapping, we cannot see the presence of library-specific effects that should not be present. But, we clearly see treatment/disease differences. Thus, we will integrate the different samples to harmonize these cells.
+
+## Assessing cell cycle effects
+```{r fig.width=7, fig.height=5}
+gg_umap_by_phase <- DimPlot(
+  seurat_obj_integrated,
+  reduction = "umap",
+  group.by = "Phase",
+  pt.size = 0.01) +
+  labs(color = "Cell Cycle Phase")
+
+gg_umap_by_phase
+```
+Finally, we ensure that there is no batch effect associated to the cell cycle phase.
+
+
+## Assessing sources of uninterested variation
+Next we will explore additional metrics, such as the number of UMIs and genes per cell, S-phase and G2M-phase markers, and mitochondrial / ribosomal gene expression on the UMAP embedding. Finally, we will also check the scrublet doublet score.
+```{r fig.width=14, fig.height=15}
+# Determine metrics to plot present in seurat_integrated@meta.data
+qc_metrics <-  c("nCount_RNA", "nFeature_RNA", 
+                 "S.Score", "G2M.Score",
+                 "pct_mt", "pct_rb")
+
+gg_qc_umap <- FeaturePlot(
+  seurat_obj_integrated,
+  reduction = "umap",
+  features = qc_metrics,
+  order = TRUE,
+  ncol = 2)
+
+gg_qc_umap
+```
+
+
+Finally, we'll also check for the doublet score and doublet prediction obtained using `scrublet`.
+```{r fig.width=14, fig.height=5}
+gg_doubletscore_umap <- FeaturePlot(
+  seurat_obj_integrated,
+  reduction = "umap",
+  features = "scrublet_doublet_scores",
+    cols = c("lightgray", "darkblue"),
+  order = TRUE)
+
+gg_doubletpred_umap <- DimPlot(
+  seurat_obj_integrated,
+  reduction = "umap",
+  group.by = "scrublet_predicted_doublet")
+
+cowplot::plot_grid(gg_doubletscore_umap,
+                   gg_doubletpred_umap, ncol = 2)
+```
+
+
+## Assessing multiple confounder variables
+
+```{r fig.width=14, fig.height=7}
+# Multiple metadata variables
+DimPlot(
+  seurat_obj_integrated,
+  group.by = "library_name",
+  split.by = "library_name",
+  pt.size = 0.2
+  ) +
+  labs(title = "",
+       color = "") + NoLegend() +
+  scale_color_brewer(palette = "Set2")
+```
+
+
+## Assessing gene markers expression
+```{r fig.width=30, fig.height=15}
+# Immune fraction
+FeaturePlot(seurat_obj_integrated,
+            features = c("Ptprc", # CD45+, immune cells
+                         "Cd3d", # T cells
+                         "Cd4", "Foxp3", # CD4+ T cells, Treg
+                         "Cd8a", "Nkg7", # CD8+ T cells, cytotoxic
+                         "Klrb1c", # NK cells
+                         "Cd19", "Cd79a", # B cells
+                         "Ms4a1", "Jchain", # Naive vs Plasma cells
+                         "Lyz", "Cd14", "Plac8", "Cd68", # Mono/macro
+                         "Itgax", "Mertk", "Siglecf", "Marco", # Alveolar macrophages
+                         "S100a8", "S100a9", # Neutrophils
+                         "Cd200r3", # Mast cells
+                         "H2-Aa" # MHC- antigen presenting
+                         ),
+            order = T,
+            ncol = 6) &
+  scale_colour_gradientn(colours = inferno_color_palette)
+```
+
+
+```{r fig.width=25, fig.height=15}
+# Non-immune fraction
+FeaturePlot(seurat_obj_integrated,
+            features = c("Epcam", "Krt", "Krt18", # Epithelial cells
+                        "Pecam1", "Lyve1", # Endothelial cells
+                        "Lypd8", "Lgals4", # Intestinal cells
+                        "Dpt", "Ly6a", "Pi16", # Univ Fibroblasts
+                        "Clu", "Slpi", # Mesothelial cells
+                        "Rgs5", "Acta2", # Pericytes
+                        "Bmp4", "Bmp5", # Telocytes
+                        "Cfd", "Car3" # Adipocytes
+                         ),
+            order = T,
+            ncol = 5) &
+  scale_colour_gradientn(colours = inferno_color_palette)
+```
+
+## Low quality genes (Hbb, Hba)
+```{r fig.width=10, fig.height=10}
+FeaturePlot(seurat_obj_integrated,
+            features = c("Hbb-bs", "Hba-a1", "Hba-a2"),
+            split.by = "library_name",
+            order = T,
+            ncol = 3) &
+  scale_colour_gradientn(colours = inferno_color_palette)
+
+VlnPlot(seurat_obj_integrated,
+        group.by = "library_name",
+        features = c("Hbb-bs", "Hba-a1", "Hba-a2"),
+        ncol = 3)
+```
+
+# Save integrated Seurat objects
+```{r}
+# Save processed lognorm Seurat object
+saveRDS(seurat_obj_integrated, paste0(path_r_objects, "/FIXnCUT_MouseColon_filtered_lognorm_harmony_processed.rds"))
+#seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_MouseColon_filtered_lognorm_harmony_processed.rds"))
+```
+
+
+# Session Info
+```{r}
+sessionInfo()
+```
