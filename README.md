@@ -2,7 +2,7 @@
 
 This is the GitHub repository for the **FixNCut: Digesting fixed tissues for single-cell genomics** manuscript.
 
-*This manuscript is current under review process.*
+*This manuscript is currently under review process.*
 
 
 ## Abstract
