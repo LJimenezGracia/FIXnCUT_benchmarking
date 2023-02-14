@@ -14,7 +14,7 @@ Here, we present FixNCut, an approach for reversibly fixing tissue followed by d
 
 ## Code implementation
 
-The repository is organized into the following folder tree, which contain the necessary files to perform all detailed tasks and obtained all our results.
+The repository is organized into the following folder tree, which contains all the necessary files and scripts to perform the detailed tasks and reproduce all our results.
 
 * **01_cellranger_mapping** -->
 * **02_QC** -->
