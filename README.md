@@ -32,6 +32,7 @@ The repository is organized into the following folder tree, which contain the ne
 You can easily download a copy of all the files contained in this repository by:
 
 * Cloning the git repository using the following command in the terminal:
+
 `git clone https://github.com/LJimenezGracia/FIXnCUT_benchmarking.git`
 
 * Downloading a .ZIP archive [HERE](https://github.com/LJimenezGracia/FIXnCUT_benchmarking/archive/refs/heads/main.zip).
