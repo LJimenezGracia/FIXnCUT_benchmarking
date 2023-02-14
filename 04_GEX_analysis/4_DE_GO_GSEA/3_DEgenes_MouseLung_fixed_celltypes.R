@@ -75,11 +75,11 @@ for (index in 1:length(comparison_name_list)) {
   DE_genes_split <- purrr::map(names(DE_genes_bycell), function(celltype) {
     # DEA
     DE_genes_up <- DE_genes_bycell[[celltype]] %>% 
-      dplyr::filter(is_significant & avg_log2FC > 0.25) %>% 
+      dplyr::filter(is_significant & avg_log2FC > 0) %>% 
       dplyr::select(gene, avg_log2FC, p_val_adj)
     
     DE_genes_down <- DE_genes_bycell[[celltype]] %>% 
-      dplyr::filter(is_significant & avg_log2FC < -0.25)%>% 
+      dplyr::filter(is_significant & avg_log2FC < 0)%>% 
       dplyr::select(gene, avg_log2FC, p_val_adj)
     
     DE_genes_list <- list(DE_genes_up, DE_genes_down)

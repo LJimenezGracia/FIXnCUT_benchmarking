@@ -1,0 +1,217 @@
+---
+title: "Differential Expression Analysis (DEA)"
+author: "Laura Jiménez Gracia"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# Introduction
+We aim to find the transcriptional signatures associated with a particular condition.
+
+## Objective
+In this Rmarkdown document, we will explore the results of the Differential Expression Analysis (DEA) between the different levels associated to a particular condition.
+
+# Pre-processing
+## Libraries
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(ggrepel)
+library(Seurat)
+library(fgsea)
+library(enrichplot)
+library(gridExtra)
+```
+
+## Parameters
+Here we will define and load objects and functions that will be used throughout the document.
+```{r}
+# Paths
+path_r_objects <- here::here("04_GEX_analysis/4_DE_GO_GSEA/results/R_objects")
+path_r_tables <- here::here("04_GEX_analysis/4_DE_GO_GSEA/results/tables")
+path_r_figs <- here::here("04_GEX_analysis/4_DE_GO_GSEA/results/figs")
+
+# Functions
+source(here::here("bin/utils.R"))
+
+# Define comparison parameters
+comparison_name_list <- c("Fixed_vs_Fresh")
+group_1_list <- c("Fixed")
+group_2_list <- c("Fresh")
+```
+
+# DEA
+```{r fig.width=10, fig.height=7}
+for (index in 1:length(comparison_name_list)) {
+  comparison_name <- comparison_name_list[[index]]
+  group_1 <- group_1_list[[index]]
+  group_2 <- group_2_list[[index]]
+  
+  # Load data
+  path_object <- paste0(path_r_objects, "/FIXnCUT_MouseColon_DEgenes_", comparison_name, ".rds")
+  DE_genes <- readRDS(path_object)
+  
+  # Data exploration
+  print(paste0(comparison_name, ": ", group_1, " vs ", group_2))
+  print("Number of significant DE genes (padj < 0.05)")
+  print(table(DE_genes$is_significant))
+  print("Number of sDEgenes UP-regulated (& Log2FC > 1)")
+  #print(sum(DE_genes$avg_log2FC[DE_genes$is_significant == TRUE] > 0))
+  print(sum(DE_genes$avg_log2FC[DE_genes$is_significant == TRUE] > 1))
+  print("Number of sDEgenes DOWN-regulated (& Log2FC < -1)")
+  #print(sum(DE_genes$avg_log2FC[DE_genes$is_significant == TRUE] < 0))
+  print(sum(DE_genes$avg_log2FC[DE_genes$is_significant == TRUE] < -1))
+
+  # Modifying p_val_adj=0 to avoid Inf values when -Log10()
+  DE_genes["p_val_adj"][DE_genes["p_val_adj"] == 0] <- 1e-300
+
+  # Volcano Plot
+  gg_volcanoplot <- gg_volcano_DEgenes(
+  DEgenes_df = DE_genes, 
+  title = comparison_name, 
+  ident_1 = group_1,
+  ident_2 = group_2,
+  threshold_log2FC = 1,
+  threshold_adjpval = -log10(0.05)
+  )
+  print(gg_volcanoplot)
+  
+  # Save results
+  path_volcanoplot <- paste0(path_r_figs, "/FIXnCUT_MouseColon_DEA_", comparison_name, ".svg")
+  ggsave(filename = path_volcanoplot, plot = gg_volcanoplot, width = 12, height = 8, dpi = 300)
+}
+```
+
+
+# GSEA
+Gene set enrichment analysis (GSEA) is a rank-based approach that determines whether predefined groups of genes/proteins/etc. are primarily up or down in one condition relative to another (Vamsi K. Mootha et al., 2003; Subramanian et al., 2005). It is typically performed as a follow-up to differential analysis, and is preferred to ORA.
+
+Fast GSEA (FGSEA) in R, which is based on the gene permutation approach (Korotkevich et al., 2016). To perform FGSEA with the fgsea package, we need a list of gene sets/pathways and the ranking metric vector.
+
+fgsea is an R-package for fast preranked gene set enrichment analysis (GSEA). This package allows to quickly and accurately calculate arbitrarily low GSEA P-values for a collection of gene sets. P-value estimation is based on an adaptive multi-level split Monte-Carlo scheme. See the [preprint](https://www.biorxiv.org/content/10.1101/060012v2) for algorithmic details.
+
+
+```{r}
+# Retrieve GENE SETS pathways - Pathways of interest
+# C2-REACTOME --> CP:REACTOME
+# C2-WP --> CP:WIKIPATHWAYS
+# C5-GOBP --> GO:BP 
+# C5-GOMF --> GO:MF
+category_db <- "MSigDBsubset"
+canonical_pathways_db <- msigdbr::msigdbr(species = "mouse") %>% 
+  filter(gs_subcat %in% c("GO:BP", "CP:KEGG", "CP:REACTOME", "CP:WIKIPATHWAYS"))
+#, category = "C5", subcategory = "GO:MF")
+
+# Fixing format to work with fgsea
+canonical_pathways <- split(x = canonical_pathways_db$gene_symbol, f = canonical_pathways_db$gs_name)
+# Explore pathway
+# print(summary(sapply(canonical_pathways, length)))
+```
+
+
+```{r fig.width=15, fig.height=10}
+for (index_1 in 1:length(comparison_name_list)) {
+  comparison_name <- comparison_name_list[[index_1]]
+  group_1 <- group_1_list[[index_1]]
+  group_2 <- group_2_list[[index_1]]
+  
+  # Load data
+  path_object <- paste0(path_r_objects, "/FIXnCUT_MouseColon_DEgenes_", comparison_name, ".rds")
+  DE_genes <- readRDS(path_object)
+
+  # GSEA analysis
+  DE_genes_df <- DE_genes %>% 
+    dplyr::filter(is_significant) %>% # & avg_log2FC > 0) %>% 
+    dplyr::select(gene, avg_log2FC, p_val_adj) %>% 
+    dplyr::arrange(desc(avg_log2FC, p_val_adj))
+
+  
+  # Ranking DE genes for fgsea
+  ranked_genes <- DE_genes_df$avg_log2FC
+  names(ranked_genes) <- DE_genes_df$gene
+  
+  # Running FGSEA
+  fgseaRes <- fgsea(pathways = canonical_pathways, 
+                    stats    = ranked_genes,
+                    scoreType = "std", # "pos",
+                    #eps0.0, # set to 0 to estimate Pvalue more accurately
+                    minSize  = 10,
+                    maxSize  = 300)
+  
+  # Filtering FGSEA results
+  # Formatting results
+  fgseaRes <- fgseaRes %>% 
+    filter(padj < 0.05) 
+  fgseaRes <- fgseaRes %>% 
+    mutate(leadingEdge_num = lengths(fgseaRes$leadingEdge),
+           genes_size_pct = round(leadingEdge_num/size*100,1)) %>% 
+    filter(leadingEdge_num >= 5) %>% 
+    filter(genes_size_pct >= 15) %>% 
+    arrange(padj)
+  
+  fgseaRes_UP <- fgseaRes %>% filter(fgseaRes$ES > 0) %>% 
+    dplyr::arrange(desc(NES, padj))
+  fgseaRes_DOWN <- fgseaRes %>% filter(fgseaRes$ES < 0) %>% 
+    dplyr::arrange(NES, padj)
+  fgseaRes_split <- list(fgseaRes_UP, fgseaRes_DOWN)
+  names(fgseaRes_split) <- c("UP-regulated", "DOWN-regulated")
+  
+  # Exploring results
+  # Plot the top 10 pathways enriched at the top and bottom of the ranked list, respectively.
+  topPathwaysUp <- fgseaRes[ES > 0][head(order(padj), n=20), pathway]
+  topPathwaysDown <- fgseaRes[ES < 0][head(order(padj), n=20), pathway]
+  topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
+  
+  print(paste0(comparison_name, ": ", group_1, " vs ", group_2))
+  gg_GSEAresults <- ggpubr::as_ggplot(plotGseaTable(canonical_pathways[topPathways], ranked_genes, fgseaRes, render = F))
+  print(gg_GSEAresults)
+  
+  # Save results
+  path_GSEArds <- paste0(path_r_objects, "/GSEA/FIXnCUT_MouseColon_GSEA_", comparison_name, "_", category_db ,".rds")
+  saveRDS(fgseaRes_split, file = path_GSEArds)
+  
+  path_GSEAtable <- paste0(path_r_figs, "/GSEA/FIXnCUT_MouseColon_GSEAtop_", comparison_name, "_", category_db , ".svg")
+  ggsave(plot = gg_GSEAresults, filename = path_GSEAtable, width = 15, height = 10, dpi = 300)
+  
+  results_path <- paste0(path_r_tables, "/GSEA/FIXnCUT_MouseColon_GSEA_", comparison_name, "_", category_db ,".xlsx")
+  openxlsx::write.xlsx(fgseaRes_split, file = results_path)
+}
+```
+
+## Exploring GSEA
+```{r}
+# #DE_genesdf <- DE_genes_df %>% arrange(desc(avg_log2FC, p.adjust()))
+# DE_genes_df$rank_num <-1:nrow(DE_genes_df)
+# 
+# #p1 <- plotEnrichment(canonical_pathways[[fgseaRes[1]$pathway]], ranked_genes) +
+# p1 <- plotEnrichment(canonical_pathways[["GOBP_RESPONSE_TO_TOXIC_SUBSTANCE"]], ranked_genes) +
+#   #labs(title=fgseaRes[1]$pathway, x = "", y = "Enrichment Score") +
+#   theme(plot.margin = unit(c(1,1,0,1), "cm"),
+#         axis.text.x = element_blank(),
+#         axis.ticks.x = element_blank()
+#         )
+# 
+# p2 <- ggplot() +
+#   geom_segment(data=DE_genes_df, aes_(x=~rank_num, xend=~rank_num, y=~avg_log2FC, yend=0), color="grey") +
+#   ylab("Ranked Metric") +
+#   xlab("Rank in Ordered Dataset") +
+#   scale_y_continuous(limits = c(-3,3), labels = scales::comma) +
+#   theme_minimal() +
+#   theme(plot.margin = unit(c(0,1,1,1), "cm"),
+#         panel.grid.minor = element_blank())
+# 
+# cowplot::plot_grid(p1, p2, ncol=1, nrow = 2, rel_heights = c(2, 1))
+```
+
+# Session info
+```{r}
+sessionInfo()
+```
