@@ -85,7 +85,7 @@ gg_dotplot_effect_glob <- sccoda_effect_global_df %>%
       color = log2.fold.change, 
       size = credible_effects)) + 
     geom_point() + 
-    scale_color_gradient2(low="#4575b4", mid="#ffffbf", high="#d73027", limits = c(-1,1)) +
+    scale_color_gradient2(low="#4575b4", mid="#ffffbf", high="#d73027") + #, limits = c(-1,1)) +
     cowplot::theme_cowplot() + 
     labs(title = "scCODA: MouseLung_cryo",
          color = "Log2FC",
