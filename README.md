@@ -1,8 +1,8 @@
 # FIXnCUT_benchmarking
 
-This is the GitHub repository for the *FixNCut: Digesting fixed tissues for single-cell genomics* manuscript.
+This is the GitHub repository for the **FixNCut: Digesting fixed tissues for single-cell genomics** manuscript.
 
-This manuscript is current under review process.
+*This manuscript is current under review process.*
 
 
 ## Abstract
@@ -14,11 +14,11 @@ The expansion of single-cell applications in the era of personalized medicine an
 
 The repository is organized into the following folder tree, which contain the necessary files to perform all detailed tasks and obtained all our results.
 
-* *01_cellranger_mapping* -->
-* *02_QC* -->
-* *03_clustering_annotation* -->
-* *04_GEX_analysis* -->
-* *bin* -->
+* **01_cellranger_mapping** -->
+* **02_QC** -->
+* **03_clustering_annotation** -->
+* **04_GEX_analysis** -->
+* **bin** -->
 
 
 ## Data accessibility
