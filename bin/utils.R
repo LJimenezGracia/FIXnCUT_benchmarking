@@ -586,12 +586,12 @@ gg_volcano_DEgenes <- function(DEgenes_df, title, ident_1, ident_2, threshold_lo
     geom_vline(xintercept = -threshold_log2FC, color = "black", linetype = "dashed") +
     geom_text_repel(data = subset_sig, aes(label = gene), color = "black", max.overlaps = 30, size = 6) +
     labs(title = title,
-         x = paste0("Log2FC(", ident_1 , " / ", ident_2, ")"),
+         x = "Log2(FC)",
          y = "-Log10(Adj p-value)",
          color = "") +
     theme_classic() +
     theme(axis.title = element_text(size = 20),
-          axis.text = element_text(size = 15),
+          axis.text = element_text(size = 16),
           legend.text = element_text(size = 17),
           plot.title = element_text(hjust = 0.5, face = "bold"))
 
