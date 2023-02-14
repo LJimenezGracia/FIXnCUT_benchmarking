@@ -43,30 +43,19 @@ palette_color_factor <- c("Fresh" = "#66C2A5",
 ```
 
 ## Load metadata
-The data used in this Rmarkdown document comes from **SCGTEST_34** dataset.
+The data used in this Rmarkdown document comes from **SCGTEST_32** dataset.
 ```{r}
 # Load all metadata information
 metadata <- read.csv(path_project_metadata)
 
 # Merging metadata tables
 metadata <- metadata %>% 
-  filter((subproject == "SCGTEST_32" | subproject == "SCGTEST_33")
-         & tissue == "Lung"
-         & ( sample_protocol == "Fresh" | sample_protocol == "Fix&Cut_24h"))
+  filter(subproject == "SCGTEST_32" & tissue == "Colon")
 
+metadata$library_name[metadata$library_name == "Colon_fresh"] <- "Fresh"
+metadata$library_name[metadata$library_name == "Colon_fixed_24h"] <- "Fixed"
 
-# Modify metadata
-metadata$library_name[metadata$library_name == "Lung_fresh_0"] <- "Fresh_1"
-metadata$library_name[metadata$library_name == "Lung_fresh"] <- "Fresh_2"
-metadata$library_name[metadata$library_name == "Lung_fixed_24h_0"] <- "Fixed_1"
-metadata$library_name[metadata$library_name == "Lung_fixed_24h"] <- "Fixed_2"
-
-metadata$sample_protocol[metadata$library_name == "Fresh_1" | metadata$library_name == "Fresh_2"] <- "Fresh"
-metadata$sample_protocol[metadata$library_name == "Fixed_1" | metadata$library_name == "Fixed_2"] <- "Fixed"
-
-metadata$replicate[metadata$library_name == "Fresh_1" | metadata$library_name == "Fixed_1"] <- "Replicate 1"
-metadata$replicate[metadata$library_name == "Fresh_2" | metadata$library_name == "Fixed_2"] <- "Replicate 2"
-
+metadata$sample_protocol <- metadata$library_name
 
 print("Libraries/Samples metadata")
 DT::datatable(metadata, options = list(scrollX = TRUE))
@@ -85,20 +74,16 @@ This can be achieved by applying the `downsampleReads` function to the molecule 
 
 
 ```{r}
-seq_list <- c(10000000, 15000000, 20000000, 25000000, 30000000, 35000000, 
-              40000000, 45000000, 50000000, 55000000, 60000000)
+seq_list <- c(5000000, 10000000, 15000000, 20000000, 25000000, 30000000, 35000000, 40000000)
 
-seqreads_genes_df <- data.frame(matrix(ncol = 5, nrow = 0))
-colnames(seqreads_genes_df) <- c("sequenced_reads", "detected_genes", "library", "sample_protocol", "replicate")
+seqreads_genes_df <- data.frame(matrix(ncol = 3, nrow = 0))
+colnames(seqreads_genes_df) <- c("sequenced_reads", "detected_genes", "sample_protocol")
 
-for (library in metadata$library_name) {
-  print(library)
-  gem_id <- unique(metadata$gem_id[metadata$library_name == library])
-  subproject <- unique(metadata$subproject[metadata$library_name == library])
-  sample_protocol <- unique(metadata$sample_protocol[metadata$library_name == library])
-  replicate <- unique(metadata$replicate[metadata$library_name == library])
+for (protocol in metadata$sample_protocol) {
+  print(protocol)
+  gem_id <- unique(metadata$gem_id[metadata$sample_protocol == protocol])
 
-  path_general <- here::here(paste0("01_cellranger_mapping/subprojects/", subproject, "/jobs"))
+  path_general <- here::here("01_cellranger_mapping/subprojects/SCGTEST_32/jobs")
   mol.info.path <- paste(path_general, gem_id, gem_id, "outs/per_sample_outs", gem_id, "count/sample_molecule_info.h5", sep = "/")
   mol.info.file <- DropletUtils::read10xMolInfo(mol.info.path)
   
@@ -118,7 +103,7 @@ for (library in metadata$library_name) {
     detected_genes <- length(m[m > 0])
     #print(detected_genes)
 
-    seqreads_genes_df[nrow(seqreads_genes_df)+1, ] <- c(sequenced_reads, detected_genes, library, sample_protocol, replicate)
+    seqreads_genes_df[nrow(seqreads_genes_df)+1, ] <- c(sequenced_reads, detected_genes, protocol)
   }
 }
 
@@ -129,30 +114,30 @@ head(seqreads_genes_df)
 ```
 
 
+## # Genes / Seq reads
 ```{r}
-for (protocol in metadata$library_name) {
-  fit1 <- lm(formula =  detected_genes ~ log10(sequenced_reads), data = seqreads_genes_df[seqreads_genes_df$library == protocol, ])
+for (protocol in metadata$sample_protocol) {
+  fit1 <- lm(formula =  detected_genes ~ sequenced_reads, data = seqreads_genes_df[seqreads_genes_df$sample_protocol == protocol, ])
   #summary(fit1)
   print(protocol)
   slope <- round(coef(fit1)[2], digits = 6)
   print(slope)
 
-  index <- rownames(seqreads_genes_df[seqreads_genes_df$library == protocol, ][which.max(seqreads_genes_df[seqreads_genes_df$library == protocol, ]$sequenced_reads), ])
+  index <- rownames(seqreads_genes_df[seqreads_genes_df$sample_protocol == protocol, ][which.max(seqreads_genes_df[seqreads_genes_df$sample_protocol == protocol, ]$sequenced_reads), ])
   seqreads_genes_df[index, "slope_gene"] <- slope
 }
 
 head(seqreads_genes_df)
 write_csv(x = seqreads_genes_df,
-          file = "tables/MouseLung_fixed_LibGenesvsReads.csv")
+          file = "tables/MouseColon_LibGenesvsReads.csv")
 ```
 
 
-## # Genes / Seq reads
 ```{r fig.width=10, fig.height=6}
-seqreads_genes_df <- read.csv("tables/MouseLung_fixed_LibGenesvsReads.csv")
+seqreads_genes_df <- read.csv("tables/MouseColon_LibGenesvsReads.csv")
 
 seqreads_genes_df %>%
-  ggplot(aes(x = sequenced_reads, y = detected_genes, color = sample_protocol, fill=sample_protocol, linetype = replicate, shape=replicate)) + 
+  ggplot(aes(x = sequenced_reads, y = detected_genes, color = sample_protocol, fill=sample_protocol)) + 
   geom_point() +
   geom_smooth(se = TRUE) +
   scale_y_continuous(labels = scales::comma) + 
@@ -171,14 +156,13 @@ seqreads_genes_df %>%
           legend.text = element_text(size = 12),
           legend.title=element_blank()) +
     guides(fill = guide_legend(override.aes = list(color = NA), reverse = TRUE), 
-                      linetype = guide_legend(override.aes = list(color = "black", fill=NA)),
            color = FALSE
            )
 
 
 
 seqreads_genes_df %>%
-  ggplot(aes(x = sequenced_reads, y = detected_genes, color = sample_protocol, fill=sample_protocol, linetype = replicate, shape=replicate)) + 
+  ggplot(aes(x = sequenced_reads, y = detected_genes, color = sample_protocol,  fill=sample_protocol)) + # label = slope_gene,
   geom_point(size=3) +
   scale_y_continuous(labels = scales::comma) + 
   scale_x_log10(labels = scales::comma) +
@@ -198,11 +182,10 @@ seqreads_genes_df %>%
           legend.text = element_text(size = 14),
           legend.title=element_blank()) +
     guides(fill = guide_legend(override.aes = list(color = NA), reverse = TRUE), 
-           linetype = guide_legend(override.aes = list(color = "black", fill=NA)),
            color = FALSE
            )
 
-ggsave("figs/MouseLung_fixed_LibGenesvsReads.svg",
+ggsave("figs/MouseColon_LibGenesvsReads.svg",
        width = 8, height = 5,
        dpi = 300)
 ```
@@ -211,18 +194,15 @@ ggsave("figs/MouseLung_fixed_LibGenesvsReads.svg",
 
 # CELLRANGER OUTPUT -- Unfiltered
 ```{r}
-cell_info_df <- data.frame(matrix(ncol = 7, nrow = 0))
-colnames(cell_info_df) <- c("cell", "reads", "umi", "gene", "library", "sample_protocol", "replicate")
+cell_info_df <- data.frame(matrix(ncol = 5, nrow = 0))
+colnames(cell_info_df) <- c("cell", "reads", "umi", "gene", "protocol")
 
 
-for (library in metadata$library_name) {
+for (protocol in metadata$sample_protocol) {
   #print(protocol)
-  gem_id <- unique(metadata$gem_id[metadata$library_name == library])
-  subproject <- unique(metadata$subproject[metadata$library_name == library])
-  protocol <- unique(metadata$sample_protocol[metadata$library_name == library])
-  replicate <- unique(metadata$replicate[metadata$library_name == library])
+  gem_id <- unique(metadata$gem_id[metadata$sample_protocol == protocol])
 
-  path_general <- here::here(paste0("01_cellranger_mapping/subprojects/", subproject, "/jobs"))
+  path_general <- here::here("01_cellranger_mapping/subprojects/SCGTEST_32/jobs")
   mol.info.path <- paste(path_general, gem_id, gem_id, "outs/per_sample_outs", gem_id, "count/sample_molecule_info.h5", sep = "/")
   mol.info.file <- DropletUtils::read10xMolInfo(mol.info.path)
   
@@ -246,10 +226,7 @@ for (library in metadata$library_name) {
   
   df <- full_join(reads_cell_df, umi_cell_df, by = "cell")
   df <- full_join(df, gene_cell_df, by = "cell")
-  df$library <- library
-  df$sample_protocol <- protocol
-  df$replicate <- replicate
-  
+  df$protocol <- protocol
 
   # Information
   #sum(df$reads)
@@ -265,41 +242,40 @@ head(cell_info_df)
 
 ```{r}
 # Computing slope genes
-for (library in metadata$library_name) {
-  fit1 <- lm(formula =  log10(gene) ~ log10(reads), data = cell_info_df[cell_info_df$library == library, ])
+for (protocol in metadata$sample_protocol) {
+  fit1 <- lm(formula =  log10(gene) ~ log10(reads), data = cell_info_df[cell_info_df$protocol == protocol, ])
   #summary(fit1)
-  print(library)
+  print(protocol)
   slope <- round(coef(fit1)[2], digits = 4)
   print(slope)
 
-  index <- rownames(cell_info_df[cell_info_df$library == library, ][which.max(cell_info_df[cell_info_df$library == library, ]$reads), ])
+  index <- rownames(cell_info_df[cell_info_df$protocol == protocol, ][which.max(cell_info_df[cell_info_df$protocol == protocol, ]$reads), ])
   cell_info_df[index, "slope_gene"] <- slope
 }
 
 # Computing slope UMIs
-for (library in metadata$library_name) {
-  fit1 <- lm(formula =  log10(umi) ~ log10(reads), data = cell_info_df[cell_info_df$library == library, ])
+for (protocol in metadata$sample_protocol) {
+  fit1 <- lm(formula =  log10(umi) ~ log10(reads), data = cell_info_df[cell_info_df$protocol == protocol, ])
   #summary(fit1)
-  print(library)
   slope <- round(coef(fit1)[2], digits = 4)
   print(slope)
 
-  index <- rownames(cell_info_df[cell_info_df$library == library, ][which.max(cell_info_df[cell_info_df$library == library, ]$reads), ])
+  index <- rownames(cell_info_df[cell_info_df$protocol == protocol, ][which.max(cell_info_df[cell_info_df$protocol == protocol, ]$reads), ])
   cell_info_df[index, "slope_umi"] <- slope
 }
 
 head(cell_info_df)
 write_csv(x = cell_info_df,
-          file = "tables/MouseLung_fixed_LibGenes-UMIsvsReadsCell.csv")
+          file = "tables/MouseColon_LibGenes-UMIsvsReadsCell.csv")
 ```
 
 
 ## # Genes / # Seq reads (per cell)
 ```{r fig.width=10, fig.height=7}
-cell_info_df <- read.csv("tables/MouseLung_fixed_LibGenes-UMIsvsReadsCell.csv")
+cell_info_df <- read.csv("tables/MouseColon_LibGenes-UMIsvsReadsCell.csv")
 
 gg <- cell_info_df %>%
-  ggplot(aes(x = reads, y = gene, color = sample_protocol, fill = sample_protocol, linetype = replicate)) +
+  ggplot(aes(x = reads, y = gene, color = protocol, fill = protocol)) +
   geom_point(alpha=0.1) + 
   #geom_rug() +
   scale_color_manual(values = palette_color_factor) +
@@ -315,28 +291,27 @@ gg <- cell_info_df %>%
           axis.text = element_text(size = 12),
           strip.placement = "outside",
           strip.background = element_rect(colour = NA),
-          legend.position = c(0.85, 0.25),
+          legend.position = c(0.9, 0.2),
           legend.text = element_text(size = 14),
           legend.title=element_blank()) +
     guides(fill = guide_legend(override.aes = list(color = NA), reverse = TRUE), 
-           linetype = guide_legend(override.aes = list(color = "black", fill=NA)),
            color = FALSE
            )
-  
 ggExtra::ggMarginal(gg, groupColour = TRUE, groupFill = TRUE)
 
-ggsave("figs/MouseLung_fixed_LibGenesvsReadsCell.svg",
+ggsave("figs/MouseColon_LibGenesvsReadsCell.svg",
        width = 8, height = 5,
        dpi = 300)
 ```
 
+
 ## # UMIs / # Seq reads (per cell)
 
 ```{r fig.width=10, fig.height=6}
-cell_info_df <- read.csv("tables/MouseLung_fixed_LibGenes-UMIsvsReadsCell.csv")
+cell_info_df <- read.csv("tables/MouseColon_LibGenes-UMIsvsReadsCell.csv")
 
 gg <- cell_info_df %>%
-  ggplot(aes(x = reads, y = umi, color = sample_protocol, fill = sample_protocol, linetype = replicate)) +
+  ggplot(aes(x = reads, y = umi, color = protocol, fill = protocol)) +
   geom_point(alpha=0.1) + 
   #geom_rug() +
   scale_color_manual(values = palette_color_factor) +
@@ -352,16 +327,15 @@ gg <- cell_info_df %>%
           axis.text = element_text(size = 12),
           strip.placement = "outside",
           strip.background = element_rect(colour = NA),
-          legend.position = c(0.85, 0.25),
+          legend.position = c(0.9, 0.2),
           legend.text = element_text(size = 14),
           legend.title=element_blank()) +
     guides(fill = guide_legend(override.aes = list(color = NA), reverse = TRUE), 
-                      linetype = guide_legend(override.aes = list(color = "black", fill=NA)),
            color = FALSE
            )
 ggExtra::ggMarginal(gg, groupColour = TRUE, groupFill = TRUE)
 
-ggsave("figs/MouseLung_fixed_LibUMIsvsReadsCell.svg",
+ggsave("figs/MouseColon_LibUMIsvsReadsCell.svg",
        width = 8, height = 5,
        dpi = 300)
 ```
@@ -370,28 +344,31 @@ ggsave("figs/MouseLung_fixed_LibUMIsvsReadsCell.svg",
 # CELLRANGER OUTPUT -- Filtered (Cellranger)
 ```{r}
 # Load Seurat object
-seurat_obj <- readRDS(here::here("02_QC/results/R_objects/FIXnCUT_MouseLung_fixed_merged.rds"))
+seurat_obj <- readRDS(here::here("02_QC/results/R_objects/FIXnCUT_MouseColon_merged.rds"))
 seurat_obj
+
+seurat_obj$sample_protocol[seurat_obj$sample_protocol == "Colon_fresh"] <- "Fresh"
+seurat_obj$sample_protocol[seurat_obj$sample_protocol == "Colon_fixed_24h"] <- "Fixed"
 ```
 
 
+## Cumulative # Genes / # cells
 ```{r}
 size_list <- seq(1, 100, by=2)
-seurat_obj$library_name <- as.factor(seurat_obj$library_name)
 
 detectedgenes_df <- data.frame(matrix(
-  ncol =  length(levels(seurat_obj$library_name)),
+  ncol =  length(levels(seurat_obj$sample_protocol)),
   nrow = length(size_list)), 
   row.names = as.character(size_list))
-names(detectedgenes_df) <- levels(seurat_obj$library_name)
+names(detectedgenes_df) <- levels(seurat_obj$sample_protocol)
 
 
-Idents(seurat_obj) <- "library_name"
+Idents(seurat_obj) <- "sample_protocol"
 for (size in size_list) {
   #print(size)
-  for (library in levels(seurat_obj$library_name)) {
-  #print(library)
-    seurat_obj_sub <- seurat_obj[, seurat_obj$library_name == library]
+  for (protocol in unique(seurat_obj$sample_protocol)) {
+  #print(protocol)
+    seurat_obj_sub <- seurat_obj[, seurat_obj$sample_protocol == protocol]
     detectedgenes_list <- list()
 
     for (var in 1:50) {
@@ -406,7 +383,7 @@ for (size in size_list) {
   
     mean_detectedgenes <- mean(unlist(detectedgenes_list))
     #print(mean_detectedgenes)
-    detectedgenes_df[as.character(size), library] <- mean_detectedgenes  
+    detectedgenes_df[as.character(size), protocol] <- mean_detectedgenes  
     
   }
 }
@@ -415,26 +392,19 @@ detectedgenes_df
 detectedgenes_df$num_cells <- as.integer(rownames(detectedgenes_df))
 
 detectedgenes <- detectedgenes_df %>% 
-  gather(key = "library_name", value = "detected_genes", `Fixed_1`:`Fresh_2`)
+  gather(key = "sample_protocol", value = "detected_genes", `Fresh`:`Fixed`)
 
-detectedgenes$sample_protocol[detectedgenes$library_name == "Fresh_1" | detectedgenes$library_name == "Fresh_2"] <- "Fresh"
-detectedgenes$sample_protocol[detectedgenes$library_name == "Fixed_1" | detectedgenes$library_name == "Fixed_2"] <- "Fixed"
-
-detectedgenes$replicate[detectedgenes$library_name == "Fresh_1" | detectedgenes$library_name == "Fixed_1"] <- "Replicate 1"
-detectedgenes$replicate[detectedgenes$library_name == "Fresh_2" | detectedgenes$library_name == "Fixed_2"] <- "Replicate 2"
-
-head(detectedgenes)
 write_csv(x = detectedgenes,
-          file = "tables/MouseLung_fixed_CumulativeGenes.csv")
+          file = "tables/MouseColon_CumulativeGenes.csv")
 ```
 
 
 ## Cumulative # Genes / # cells
 ```{r fig.width=10, fig.height=7}
-detectedgenes <- read.csv("tables/MouseLung_fixed_CumulativeGenes.csv")
+detectedgenes <- read.csv("tables/MouseColon_CumulativeGenes.csv")
 
 detectedgenes %>% 
-  ggplot(aes(x = num_cells, y = detected_genes, color = sample_protocol, shape = replicate)) +
+  ggplot(aes(x = num_cells, y = detected_genes, color = sample_protocol)) +
   geom_point(size=2) +
   scale_color_manual(values = palette_color_factor) +
   scale_fill_manual(values = palette_color_factor) +
@@ -450,7 +420,7 @@ detectedgenes %>%
           legend.title=element_blank()) +
     guides(color = guide_legend(override.aes = list(fill = NA), reverse = TRUE))
 
-ggsave("figs/MouseLung_fixed_CumulativeGenes.svg",
+ggsave("figs/MouseColon_CumulativeGenes.svg",
        width = 8, height = 5,
        dpi = 300)
 ```
@@ -462,12 +432,10 @@ Here, we show an overview of the scRNA-seq data obtained after the quality contr
 table_qc_gex(seurat_obj@meta.data, subtitle = "After cell QC filtering out")
 ```
 
-
 ```{r fig.height=6, fig.width=20}
 VlnPlot(seurat_obj,
         features = c("nCount_RNA", "nFeature_RNA", "pct_mt", "pct_rb"),
-        split.by = "sample_protocol",
-        group.by = "replicate",
+        group.by = "sample_protocol",
         pt.size = 0.01,
         log = TRUE,
         ncol = 4

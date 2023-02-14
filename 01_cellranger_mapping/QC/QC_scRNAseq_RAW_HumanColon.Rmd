@@ -82,7 +82,7 @@ This can be achieved by applying the `downsampleReads` function to the molecule 
 
 
 ```{r}
-seq_list <- c(20000000, 30000000, 40000000, 50000000, 60000000, 70000000, 80000000, 90000000, 100000000)
+seq_list <- c(10000000, 20000000, 30000000, 40000000, 50000000, 60000000, 70000000, 80000000)
 #prop_list <- c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1)
 
 seqreads_genes_df <- data.frame(matrix(ncol = 3, nrow = 0))
@@ -94,7 +94,7 @@ for (library in metadata$library_name) {
   subproject <- unique(metadata$subproject[metadata$library_name == library])
 
   path_general <- here::here(paste0("01_cellranger_mapping/subprojects/", subproject, "/jobs"))
-  mol.info.path <- paste(path_general, gem_id, gem_id, "outs/multi/count/raw_molecule_info.h5", sep = "/")
+  mol.info.path <- paste(path_general, gem_id, gem_id, "outs/per_sample_outs", gem_id, "count/sample_molecule_info.h5", sep = "/")
   mol.info.file <- DropletUtils::read10xMolInfo(mol.info.path)
   
   all_reads <- sum(mol.info.file$data$reads)
@@ -317,7 +317,7 @@ gg <- cell_info_df %>%
            )
 ggExtra::ggMarginal(gg, groupColour = TRUE, groupFill = TRUE)
 
-ggsave("figs/HumanColon_LibReadsvsReadsCell.svg",
+ggsave("figs/HumanColon_LibGenesvsReadsCell.svg",
        width = 8, height = 5,
        dpi = 300)
 ```
