@@ -168,14 +168,13 @@ plot_library_pct_reads <- function(df) {
     scale_fill_manual(values = c("#8DB580", "#FFEF9F", "#855A5C", "#8A8E91")) +
     labs(x = "",
          y = "Percentage of sequenced reads") +
-    theme(axis.title = element_text(size = 16),
-          axis.text.x = element_text(size = 12),
-          axis.text.y = element_text(size = 14),
-          #axis.text.x = element_text(hjust = 1, angle = 90),
+    theme(axis.title = element_text(size = 18),
+          axis.text.x = element_text(size = 14),
+          axis.text.y = element_text(size = 16, hjust = 0.5, angle = 90),
           strip.placement = "outside",
           strip.background = element_rect(colour = NA),
-          legend.position = "top",
-          legend.text = element_text(size = 12),
+          legend.position = "bottom",
+          legend.text = element_text(size = 14),
           legend.title=element_blank()) +
     guides(fill = guide_legend(reverse = TRUE))
   gg_qc_map

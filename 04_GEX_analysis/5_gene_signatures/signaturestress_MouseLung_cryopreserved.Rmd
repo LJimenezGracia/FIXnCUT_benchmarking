@@ -697,6 +697,31 @@ ggsave(paste0(path_r_figs_out, "/MouseLung_cryo_DenisenkoetalUPgenes_DEgenes.svg
 ```
 
 
+## Comparing ALL
+```{r fig.height=4, fig.width=4}
+venndiagram <- VennDiagram::venn.diagram(
+  x = list(DE_genes_DOWN_list, 
+           vandenBrinketal_up_genes_list,
+           OFlanaganetal_up_genes_list,
+           Denisenkoatal_up_genes_list),
+  category.names = c(" ", " ", " ", " "),
+  filename = NULL,
+  fill = c("#023047", "#ffb703", "#3DED97", "#E3242B"),
+  lty = 'blank',
+  
+  cex = 1.5,
+  fontfamily = "sans",
+
+  cat.cex = 1,  
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.fontfamily = "sans"
+)
+
+grid::grid.newpage()
+grid::grid.draw(venndiagram)
+```
+
 # OTHER SIGNATURES: PBMC-related
 ## SIGNATURE: Sampling-time on single-cell PBMC by Massoni-Badosa et al.
 ```{r fig.width=20, fig.height=8}
