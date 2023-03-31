@@ -247,7 +247,7 @@ ggsave("figs/HumanPBMC_LibReads.svg",
        dpi = 300)
 ```
 
-```{r fig.height=4, fig.width=7}
+```{r fig.height=5, fig.width=8}
 # Mouse Lung
 cellranger_metrics_gex_df_sub <- cellranger_metrics_gex_df[(cellranger_metrics_gex_df$tissue == "Lung" &
                                                             cellranger_metrics_gex_df$organism == "Mouse" &
@@ -264,22 +264,22 @@ ggsave("figs/MouseLung_fixed_LibReads.svg",
        dpi = 300)
 ```
 
-```{r fig.height=4, fig.width=8}
+```{r fig.height=5, fig.width=8}
 # Mouse Lung with Cryo
 cellranger_metrics_gex_df_sub <- cellranger_metrics_gex_df[(cellranger_metrics_gex_df$subproject == "SCGTEST_33" &
                                                             (cellranger_metrics_gex_df$sample_protocol != "Fresh" &
                                                             cellranger_metrics_gex_df$sample_protocol != "Fix&Cut_7d")),]
 cellranger_metrics_gex_df_sub$library_name[cellranger_metrics_gex_df_sub$library_name == "Lung_fixed_24h"] <- "Fixed"
-cellranger_metrics_gex_df_sub$library_name[cellranger_metrics_gex_df_sub$library_name == "Lung_cryo"] <- "Cryopreserved"
-cellranger_metrics_gex_df_sub$library_name[cellranger_metrics_gex_df_sub$library_name == "Lung_fixed_cryo"] <- "Fixed+Cryopreserved"
+cellranger_metrics_gex_df_sub$library_name[cellranger_metrics_gex_df_sub$library_name == "Lung_cryo"] <- "Cryo"
+cellranger_metrics_gex_df_sub$library_name[cellranger_metrics_gex_df_sub$library_name == "Lung_fixed_cryo"] <- "Fixed+Cryo"
 
 cellranger_metrics_gex_df_sub$library_name <- factor(
   x = cellranger_metrics_gex_df_sub$library_name,
-  levels = c("Fixed", "Cryopreserved", "Fixed+Cryopreserved"))
+  levels = c("Fixed", "Cryo", "Fixed+Cryo"))
 
 plot_library_pct_reads(cellranger_metrics_gex_df_sub)
 ggsave("figs/MouseLung_cryo_LibReads.svg",
-       width = 9, height = 4,
+       width = 8, height = 5,
        dpi = 300)
 ```
 
@@ -298,7 +298,7 @@ ggsave("figs/MouseLung_stress_LibReads.svg",
        dpi = 300)
 ```
 
-```{r fig.height=4, fig.width=7}
+```{r fig.height=5, fig.width=8}
 # Mouse Colon
 cellranger_metrics_gex_df_sub <- cellranger_metrics_gex_df[(cellranger_metrics_gex_df$tissue == "Colon" &
                                                             cellranger_metrics_gex_df$organism == "Mouse" &
@@ -326,40 +326,40 @@ plot_library_pct_reads(cellranger_metrics_gex_df_sub)
 ```
 
 
-```{r fig.height=4, fig.width=8}
+```{r fig.height=4, fig.width=8.5}
 # Human Colon
 cellranger_metrics_gex_df_sub <- cellranger_metrics_gex_df[(cellranger_metrics_gex_df$tissue == "Colon" &
                                                             cellranger_metrics_gex_df$organism == "Human" &
                                                              cellranger_metrics_gex_df$subproject == "SALAS_47"),]
 cellranger_metrics_gex_df_sub$library_name[cellranger_metrics_gex_df_sub$library_name == "FIX-1"] <- "Fresh"
 cellranger_metrics_gex_df_sub$library_name[cellranger_metrics_gex_df_sub$library_name == "FIX-2"] <- "Fixed"
-cellranger_metrics_gex_df_sub$library_name[cellranger_metrics_gex_df_sub$library_name == "FIX-3"] <- "Fixed+Cryopreserved"
+cellranger_metrics_gex_df_sub$library_name[cellranger_metrics_gex_df_sub$library_name == "FIX-3"] <- "Fixed+Cryo"
 
 cellranger_metrics_gex_df_sub$library_name <- factor(
   x = cellranger_metrics_gex_df_sub$library_name,
-  levels = c("Fresh", "Fixed", "Fixed+Cryopreserved"))
+  levels = c("Fresh", "Fixed", "Fixed+Cryo"))
 
 plot_library_pct_reads(cellranger_metrics_gex_df_sub)
 ```
 
 
-```{r fig.height=4, fig.width=8}
+```{r fig.height=5, fig.width=8}
 # Human Colon
 cellranger_metrics_gex_df_sub <- cellranger_metrics_gex_df[(cellranger_metrics_gex_df$tissue == "Colon" &
                                                             cellranger_metrics_gex_df$organism == "Human" &
                                                              cellranger_metrics_gex_df$subproject == "THREETR_27"),]
 cellranger_metrics_gex_df_sub$library_name[cellranger_metrics_gex_df_sub$library_name == "Human colon_fresh"] <- "Fresh"
 cellranger_metrics_gex_df_sub$library_name[cellranger_metrics_gex_df_sub$library_name == "Human colon_fixed"] <- "Fixed"
-cellranger_metrics_gex_df_sub$library_name[cellranger_metrics_gex_df_sub$library_name == "Human colon_cryopreserved"] <- "Cryopreserved"
-cellranger_metrics_gex_df_sub$library_name[cellranger_metrics_gex_df_sub$library_name == "Human colon_fixed_cryopreserved"] <- "Fixed+Cryopreserved"
+cellranger_metrics_gex_df_sub$library_name[cellranger_metrics_gex_df_sub$library_name == "Human colon_cryopreserved"] <- "Cryo"
+cellranger_metrics_gex_df_sub$library_name[cellranger_metrics_gex_df_sub$library_name == "Human colon_fixed_cryopreserved"] <- "Fixed+Cryo"
 
 cellranger_metrics_gex_df_sub$library_name <- factor(
   x = cellranger_metrics_gex_df_sub$library_name,
-  levels = c("Fresh", "Fixed", "Cryopreserved", "Fixed+Cryopreserved"))
+  levels = c("Fresh", "Fixed", "Cryo", "Fixed+Cryo"))
 
 plot_library_pct_reads(cellranger_metrics_gex_df_sub)
 ggsave("figs/HumanColon_LibReads.svg",
-       width = 9, height = 4,
+       width = 8, height = 5,
        dpi = 300)
 ```
 

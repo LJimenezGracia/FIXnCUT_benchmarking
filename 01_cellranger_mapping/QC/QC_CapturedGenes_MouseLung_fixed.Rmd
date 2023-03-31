@@ -125,7 +125,7 @@ seurat_obj_list
 ## Upset Plot
 https://github.com/hms-dbmi/UpSetR
 
-```{r fig.height=5, fig.width=9}
+```{r fig.height=5, fig.width=12}
 UpSetR::upset(
   UpSetR::fromList(list(
     "Fresh_1" = rownames(seurat_obj_list$Fresh_1),
@@ -136,7 +136,7 @@ UpSetR::upset(
   order.by = "freq",
   #group.by = "sets",
   mainbar.y.label = "# Genes", sets.x.label = "# Genes / sample",
-  point.size = 4, line.size = 1, text.scale = 1.5,
+  point.size = 5, line.size = 1, text.scale = 2,
   empty.intersections = "on",
    queries = list(
      list(query = intersects, params = list("Fixed_1", "Fixed_2", "Fresh_1", "Fresh_2"), color = "blue", active = T),

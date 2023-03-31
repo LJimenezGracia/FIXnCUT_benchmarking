@@ -76,7 +76,14 @@ sccoda_effect_global_df$Cell.Type <- factor(sccoda_effect_global_df$Cell.Type,
 
 
 # Dotplot immune
-```{r fig.height=6, fig.width=7}
+```{r}
+sccoda_effect_global_df$comparison_label[sccoda_effect_global_df$comparison_label == "F vs C"] <- "Fixed\nvs Cryo"
+sccoda_effect_global_df$comparison_label[sccoda_effect_global_df$comparison_label == "F+C vs C"] <- "Fixed+Cryo\nvs Cryo"
+sccoda_effect_global_df$comparison_label[sccoda_effect_global_df$comparison_label == "F+C vs F"] <- "Fixed+Cryo\nvs Fixed"
+```
+
+
+```{r fig.height=5, fig.width=7}
 gg_dotplot_effect_glob <- sccoda_effect_global_df %>%
   filter(comparison_fraction == "MouseLung") %>% 
     ggplot(aes(
@@ -94,7 +101,7 @@ gg_dotplot_effect_glob <- sccoda_effect_global_df %>%
           axis.title = element_blank(),
           axis.line  = element_blank(),
           axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
-          #legend.position = "bottom",
+          legend.position = "bottom",
           legend.text = element_text(size=10))
 
 gg_dotplot_effect_glob

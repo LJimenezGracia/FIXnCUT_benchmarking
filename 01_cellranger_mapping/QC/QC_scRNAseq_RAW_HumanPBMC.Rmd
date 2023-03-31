@@ -25,6 +25,7 @@ In this Rmarkdown document, we are going to
 library(tidyverse)
 library(Seurat)
 library(gt)
+library(scales)
 ```
 
 ## Parameters
@@ -128,7 +129,7 @@ write_csv(x = seqreads_genes_df,
 ```
 
 ## # Genes / Seq reads
-```{r fig.width=10, fig.height=6}
+```{r fig.width=8, fig.height=5}
 seqreads_genes_df <- read.csv("tables/HumanPBMC_LibGenesvsReads.csv")
 
 seqreads_genes_df %>%
@@ -158,23 +159,22 @@ seqreads_genes_df %>%
 
 seqreads_genes_df %>%
   ggplot(aes(x = sequenced_reads, y = detected_genes, color = sample_protocol,  fill=sample_protocol)) + # label = slope_gene,
-  geom_point(size=3) +
-  scale_y_continuous(labels = scales::comma) + 
-  scale_x_log10(labels = scales::comma) +
-  stat_smooth(method='lm', se = TRUE) +
+  geom_point(size=4) +
+  scale_x_log10(labels = label_number(scale = 1e-6), breaks = seq(10000000, 130000000, by = 20000000)) +
+  stat_smooth(method='lm', se = TRUE, size = 1) +
   theme_classic() +
   scale_color_manual(values = palette_color_factor) +
   scale_fill_manual(values = palette_color_factor) +
   #geom_text() + 
-  labs(x = "# Sequencing Reads",
+  labs(x = "# Sequencing Reads (in millions)",
      y = "# Detected Genes",
      color = "Protocol") +
-    theme(axis.title = element_text(size = 16),
-          axis.text = element_text(size = 12),
+    theme(axis.title = element_text(size = 18),
+          axis.text = element_text(size = 14),
           strip.placement = "outside",
           strip.background = element_rect(colour = NA),
           legend.position = c(0.9, 0.2),
-          legend.text = element_text(size = 14),
+          legend.text = element_text(size = 16),
           legend.title=element_blank()) +
     guides(fill = guide_legend(override.aes = list(color = NA), reverse = TRUE), 
            color = FALSE
@@ -268,17 +268,16 @@ write_csv(x = cell_info_df,
 
 
 ## # Genes / # Seq reads (per cell)
-```{r fig.width=10, fig.height=7}
+```{r fig.width=8, fig.height=5}
 cell_info_df <- read.csv("tables/HumanPBMC_LibGenes-UMIsvsReadsCell.csv")
 
 gg <- cell_info_df %>%
   ggplot(aes(x = reads, y = gene, color = protocol, fill = protocol)) +
   geom_point(alpha=0.1) + 
-  #geom_rug() +
   scale_color_manual(values = palette_color_factor) +
   scale_fill_manual(values = palette_color_factor) +
   stat_smooth(method='lm', se=TRUE) + # fitted linear regression model
-    scale_y_log10(labels = scales::comma) +
+  scale_y_log10(labels = scales::comma) +
   scale_x_log10(labels = scales::comma) +
   labs(x = "# Sequencing Reads",
      y = "# Detected Genes",
@@ -303,7 +302,7 @@ ggsave("figs/HumanPBMC_LibGenesvsReadsCell.svg",
 
 ## # UMIs / # Seq reads (per cell)
 
-```{r fig.width=10, fig.height=6}
+```{r fig.width=8, fig.height=5}
 cell_info_df <- read.csv("tables/HumanPBMC_LibGenes-UMIsvsReadsCell.csv")
 
 gg <- cell_info_df %>%
@@ -393,23 +392,23 @@ write_csv(x = detectedgenes,
 ```
 
 ## Cumulative # Genes / # cells
-```{r fig.width=10, fig.height=7}
+```{r fig.width=8, fig.height=5}
 detectedgenes <- read.csv("tables/HumanPBMC_CumulativeGenes.csv")
 
 detectedgenes %>% 
   ggplot(aes(x = num_cells, y = detected_genes, color = sample_protocol)) +
-  geom_point(size=2) +
+  geom_point(size=3) +
   scale_color_manual(values = palette_color_factor) +
   scale_fill_manual(values = palette_color_factor) +
   labs(x = "# Sampled Cells",
      y = "# Detected Genes") +
   theme_classic() +
-  theme(axis.title = element_text(size = 16),
-          axis.text = element_text(size = 12),
+    theme(axis.title = element_text(size = 18),
+          axis.text = element_text(size = 14),
           strip.placement = "outside",
           strip.background = element_rect(colour = NA),
           legend.position = c(0.9, 0.2),
-          legend.text = element_text(size = 14),
+          legend.text = element_text(size = 16),
           legend.title=element_blank()) +
     guides(color = guide_legend(override.aes = list(fill = NA), reverse = TRUE))
 

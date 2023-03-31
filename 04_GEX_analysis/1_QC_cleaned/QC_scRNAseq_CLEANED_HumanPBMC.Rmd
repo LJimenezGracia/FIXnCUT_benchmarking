@@ -107,6 +107,9 @@ seurat_obj$celltypes <- factor(x = seurat_obj$celltypes,
                          "DC1/DC2","pDCs",
                          "Naive B cells", "Memory B cells",
                          "Progenitor cells","Cycling cells"))
+
+seurat_obj$condition <- factor(x = seurat_obj$condition,
+                                    levels = c("Fresh", "Fixed"))
 ```
 
 
@@ -146,28 +149,29 @@ ggsave(paste0(path_r_figs_out, "/HumanPBMC_UMAP.svg"),
        dpi = 300)
 ```
 
-```{r fig.width=10, fig.height=5}
+```{r fig.width=7, fig.height=4}
 DimPlot(
   seurat_obj,
   reduction = "umap",
   group.by = "condition",
   split.by = "condition") +
-  scale_color_manual(values = palette_color_factor) &
+  scale_color_manual(values = palette_color_factor) +
   labs(title = "", color = "") + NoLegend()
 
 ggsave(paste0(path_r_figs_out, "/HumanPBMC_UMAPsplit.svg"),
-       width = 10, height = 5,
+       width = 7, height = 4,
        dpi = 300)
 ```
 
+
 # QC metrics
-```{r fig.height=5, fig.width=15}
+```{r fig.height=5, fig.width=10}
 VlnPlot(seurat_obj,
-        features = c("nCount_RNA", "nFeature_RNA", "pct_mt", "pct_rb"),
+        features = c("nCount_RNA", "nFeature_RNA", "pct_mt"),
         group.by = "condition",
         pt.size = 0,
         log = TRUE,
-        ncol = 4
+        ncol = 3
         ) &
   scale_fill_manual(values = palette_color_factor) &
   theme(axis.text.x = element_text(angle = 0, hjust = 0.5, size = 20),
@@ -181,7 +185,7 @@ VlnPlot(seurat_obj,
   #                               label = "p.format", label.y.npc = 0.95)
 
 ggsave(paste0(path_r_figs_out, "/HumanPBMC_QCmetrics.svg"),
-       width = 20, height = 6,
+       width = 10, height = 6,
        dpi = 300)
 ```
 
@@ -193,7 +197,7 @@ seurat_metadata <-  seurat_obj@meta.data %>%
 ```
 
 
-```{r fig.height=10, fig.width=20}
+```{r fig.height=7, fig.width=15}
 ggplot(seurat_metadata, 
        aes(x = celltypes, y = qc_metric_value, fill = condition)) +
   introdataviz::geom_split_violin() +
@@ -206,18 +210,13 @@ ggplot(seurat_metadata,
   labs(x = "Cell-types", y="") +
   facet_wrap(~qc_metric, scales = "free_y", nrow = 3) + 
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-        axis.text = element_text(size=18),
+        axis.text = element_text(size=15),
         axis.title = element_blank(),
-        strip.text = element_text(size=20),
-          legend.position = "right",
-          legend.text = element_text(size = 20),
-          legend.title=element_blank()) +
-    guides(fill = guide_legend(override.aes = list(color = NA), reverse = TRUE), 
-           color = FALSE
-           )
+        strip.text = element_text(size=18),
+          legend.position = "none")
 
 ggsave(paste0(path_r_figs_out, "/HumanPBMC_QCmetricsCell.svg"),
-       width = 20, height = 10,
+       width = 15, height = 7,
        dpi = 300)
 ```
 
@@ -241,7 +240,7 @@ ggsave(paste0(path_r_figs_out, "/HumanPBMC_UMAPcelltypes.svg"),
 ```
 
 # Celltypes Proportions
-```{r fig.width=10, fig.height=5}
+```{r fig.width=10, fig.height=4}
 dittoSeq::dittoBarPlot(seurat_obj, 
                              "celltypes",
                              group.by = "condition",
@@ -251,18 +250,18 @@ dittoSeq::dittoBarPlot(seurat_obj,
                              color.panel = palette_color_cells) +
   coord_flip() + 
   labs(title = "") +
-  theme(axis.text.y = element_text(size=20),
+  theme(axis.text.y = element_text(size=20, hjust = 0.5, angle = 90),
         axis.text.x = element_text(angle = 0, hjust = 0.5, size=14),
         axis.title.x = element_text(size=20),
         axis.title.y = element_blank())
 
 ggsave(paste0(path_r_figs_out, "/HumanPBMC_CellProp.svg"),
-       width = 10, height = 5,
+       width = 10, height = 4,
        dpi = 300)
 ```
 
 # Dotplot gene markers
-```{r fig.width=14, fig.height=7}
+```{r fig.width=15, fig.height=6}
 genes_of_interest <- c("CD3E",	"CD4", # Tcells
                        "CCR7",	"LEF1",	"TCF7", # Naive CD4+ T cells
                        "CRIP1", "ITGB1", "CCR10", # Transitional CD4+ T cells
@@ -298,10 +297,10 @@ DotPlot(seurat_obj,
         dot.scale = 8) +
   theme(axis.text.x = element_text(angle=90, hjust = 1, vjust = 0.5),
         axis.title = element_blank(),
-        legend.position = "bottom")
+        legend.position = "right")
 
 ggsave(paste0(path_r_figs_out, "/HumanPBMC_DotplotMarkers.svg"),
-       width = 14, height = 7,
+       width = 15, height = 6,
        dpi = 300)
 ```
 

@@ -1,0 +1,1184 @@
+---
+title: "scRNAseq finding stress signature"
+author: "Laura Jiménez Gracia"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# Introduction
+Following with the results obtained in the previous notebook, we will now perform other pre-processing steps, such as data normalization, feature selection, scaling, dimensionality reduction, and data visualization prior to batch-effect correction (data integration). To do so, we will follow the current best practices for scRNA-seq QC described in [Luecken al. Mol Syst Biol (2018)](https://doi.org/10.15252/msb.20188746) and adapt some workflows from [Satija Lab](https://satijalab.org/seurat/vignettes.html).
+
+## Objective
+In this Rmarkdown document, we are going to perform the previous pre-processing steps.
+
+# Pre-processing
+## Libraries
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(svglite)
+library(Seurat)
+library(UCell)
+library(Nebulosa)
+library(viridis)
+```
+
+## Parameters
+Here we will define and load objects and functions that will be used throughout the document.
+```{r}
+# Paths
+path_project_metadata <- here::here("01_cellranger_mapping/data/FIXnCUT_metadata.csv")
+path_r_objects <- here::here("03_clustering_annotation/results/R_objects")
+path_r_figs_out <- here::here("04_GEX_analysis/results/figs")
+
+# Functions
+source(here::here("bin/utils.R"))
+
+# Color palette
+palette_color_factor <- c("Fresh" = "#66C2A5", 
+                          "Fixed" ="#FC8D62")
+palette_color_library <- c("Fixed_1" = "#D53E4F",
+                           "Fixed_2" = "#FDAE61",
+                           "Fresh_1" = "#ABDDA4",
+                           "Fresh_2" = "#3288BD")
+
+set.seed(12)
+```
+
+## Load data
+```{r}
+# Load Seurat object
+seurat_obj <- readRDS(str_c(path_r_objects, "/FIXnCUT_MouseLung_fixed_clustering_annotation_cleaned-NoNeutrophils.rds"))
+seurat_obj$sample_protocol <- factor(x = seurat_obj$sample_protocol,
+                                    levels = c("Fresh", "Fixed"))
+seurat_obj$celltypes <- factor(x = seurat_obj$celltypes,
+                                    levels = c("T cells", "NK cells", "Monocytes", "Macrophages Apoe+", 
+                                               "Alveolar Macrophages", "Monocyte-derived DCs", "B cells",
+                                                "Fibroblasts", "Pericytes", "Lymphatic Endothelial cells",
+                                               "Arterial cells", "Vein cells",  "Capillary aerocyte (aCap) cells",
+                                               "Capillary general (gCap) cells", "Bipotent Capillary cells", "Pneumocytes Type I", "Pneumocytes Type II",
+                                               "Club cells", "Cycling cells"))
+seurat_obj
+table(seurat_obj$library_name)
+table(seurat_obj$library_name, seurat_obj$celltypes)
+
+# Downsampling sample
+df <- data.frame(condition=seurat_obj$library_name, cell_type=seurat_obj$celltypes)
+df$barcode <- rownames(df)
+df_new <- df %>% 
+  group_by(condition, cell_type) %>%
+  slice_sample(n=250, replace = F) #  sample w/i each condition/celltype
+table(df_new$condition, df_new$cell_type)
+cells_to_keep <- df_new$barcode
+
+seurat_obj <- subset(seurat_obj, cells = cells_to_keep)
+seurat_obj
+table(seurat_obj$library_name)
+table(seurat_obj$library_name, seurat_obj$celltypes)
+```
+
+
+# Housekeeping markers
+
+Housekeeping genes used from: 
+https://www.cell.com/trends/genetics/text/S0168-9525(13)00089-9?_returnURL=https%3A%2F%2Flinkinghub.elsevier.com%2Fretrieve%2Fpii%2FS0168952513000899%3Fshowall%3Dtrue
+
+```{r fig.width=20, fig.height=8}
+housekeeping_genes <- c("Actb", "4933434E20Rik", "Chmp2a", "Emc7", "Gpi1", "Psmb2", "Psmb4", "Rab7", "Reep5", "Snrpd3", "Vcp", "Vps29")
+
+VlnPlot(
+  seurat_obj,
+  features = housekeeping_genes,
+  group.by = "replicate",
+  split.by = "sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0, 
+  ncol = 6) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "p.signif", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20))
+```
+
+
+```{r fig.width=20, fig.height=20}
+VlnPlot(
+  seurat_obj,
+  features = housekeeping_genes,
+  group.by = "celltypes",
+  split.by = "sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0, 
+  ncol = 4) &
+  theme(axis.text.x = element_text(angle = 60, hjust = 1, vjust = 1),
+        axis.text = element_text(size=12),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20)) 
+```
+
+
+# Low quality markers
+
+```{r fig.width=15, fig.height=4}
+lowquality_genes <- c("Hbb-b1", "Hbb-b2", "Hbb-bs", "Hbb-bt", "Hba-a1", "Hba-a2")
+
+VlnPlot(
+  seurat_obj,
+  features = lowquality_genes,
+  group.by = "replicate",
+  split.by = "sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0, 
+  ncol = 4) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "p.signif", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20))  &
+  aes(alpha=seurat_obj$replicate) &
+  scale_alpha_discrete(range = c(0.5, 1))
+```
+
+```{r fig.width=20, fig.height=5}
+VlnPlot(
+  seurat_obj,
+  features = lowquality_genes,
+  group.by = "celltypes",
+  split.by = "sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0.01, 
+  ncol = 4) &
+  theme(axis.text.x = element_text(angle = 60, hjust = 1, vjust = 1),
+        axis.text = element_text(size=12),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20)) 
+```
+
+
+# Heat shock protein (HSP) markers
+```{r fig.width=20, fig.height=8}
+HSP_genes <- c("Hsp90aa1", "Hsp90ab1", "Hspa1a", "Hspa1b", "Hspa5", "Hspa6", "Hspa8", "Hspb1", "Hspd1", "Hspe1", "Hsph1")
+
+VlnPlot(
+  seurat_obj,
+  features = HSP_genes,
+  group.by = "replicate",
+  split.by = "sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0, 
+  ncol = 6) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "p.signif", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20)) &
+  aes(alpha=seurat_obj$replicate) &
+  scale_alpha_discrete(range = c(0.5, 1))
+```
+
+
+```{r fig.width=20, fig.height=15}
+VlnPlot(
+  seurat_obj,
+  features = HSP_genes,
+  group.by = "celltypes",
+  split.by = "sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0, 
+  ncol = 4) &
+  theme(axis.text.x = element_text(angle = 60, hjust = 1, vjust = 1),
+        axis.text = element_text(size=12),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20)) 
+```
+
+# Stress-sensitive genes
+```{r fig.width=20, fig.height=8}
+hypoxiaadaptation_genes <- c("Ddit3", "Xbp1", "Ddit4", "P4hb", # ER stress (Rashid et al, 2015)
+                             "Eno1", "Eno2", "Eno3", "Hk2", "Pgk1", "Gapdh", # glycolysis
+                             "Pdk1", "Phd", "Slc2a1" # hypoxia; https://pubmed.ncbi.nlm.nih.gov/32144406/
+                             )
+
+VlnPlot(
+  seurat_obj,
+  features = hypoxiaadaptation_genes,
+  group.by = "replicate",
+  split.by = "sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0, 
+  ncol = 5) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "p.signif", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20))  &
+  aes(alpha=seurat_obj$replicate) &
+  scale_alpha_discrete(range = c(0.5, 1))
+```
+
+```{r fig.width=20, fig.height=15}
+VlnPlot(
+  seurat_obj,
+  features = hypoxiaadaptation_genes,
+  group.by = "celltypes",
+  split.by = "sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0, 
+  ncol = 3) &
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        axis.text = element_text(size=12),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20)) 
+```
+
+
+# SIGNATURE: dissociation-associated on mouse Muscle Stem Cells (MSC) by van den Brink et al.
+```{r fig.width=20, fig.height=8}
+path_signature_vandenBrinketal <- here::here("04_GEX_analysis/5_gene_signatures/published_signatures/signature_vandenBrinketal_dissociation-associated_mMuscleSC.csv")
+vandenBrinketal__genes <- read_csv(path_signature_vandenBrinketal)
+
+vandenBrinketal_up_genes <- vandenBrinketal__genes %>% 
+  filter(direction == "up-regulated") %>% 
+  dplyr::select(gene)
+
+vandenBrinketal_up_genes_list <- vandenBrinketal_up_genes$gene
+print(length(vandenBrinketal_up_genes_list))
+print(vandenBrinketal_up_genes_list)
+```
+
+
+### Visualizing genes
+
+```{r fig.width=14, fig.height=8}
+DotPlot(seurat_obj,
+        features = vandenBrinketal_up_genes_list,
+        group.by = "celltypes",
+        split.by = "sample_protocol",
+        cols = "RdBu",
+        dot.scale = 5
+        ) +
+   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+
+### Computing signature
+```{r fig.width=8, fig.height=5}
+# UCELL GENE SIGNATURE SCORE
+## Using positive and negative gene sets, GENE+ or GENE-
+seurat_obj <- AddModuleScore_UCell(seurat_obj, 
+                                   features=list("vandenBrinketal_up_genes" = vandenBrinketal_up_genes_list)
+                                   )
+```
+
+### Visualizing Ucell
+```{r fig.width=8, fig.height=5}
+VlnPlot(
+  seurat_obj,
+  features = "vandenBrinketal_up_genes_UCell",
+  group.by ="sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "..p.format..", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20)) &
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
+```
+
+```{r fig.width=8, fig.height=5}
+VlnPlot(
+  seurat_obj,
+  features = "vandenBrinketal_up_genes_UCell",
+  group.by = "replicate",
+  split.by = "sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "..p.format..", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20))  &
+  aes(alpha=seurat_obj$replicate) &
+  scale_alpha_discrete(range = c(0.5, 1))&
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
+```
+
+```{r fig.width=12, fig.height=8}
+VlnPlot(
+  seurat_obj,
+  features = "vandenBrinketal_up_genes_UCell",
+  group.by = "celltypes",
+  split.by = "sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "p.signif", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20))&
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
+```
+
+```{r fig.width=12, fig.height=8}
+VlnPlot(
+  seurat_obj,
+  features = "vandenBrinketal_up_genes_UCell",
+  group.by = "celltypes",
+  split.by = "library_name",
+  cols = palette_color_library, 
+  pt.size = 0) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "p.signif", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20))&
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
+
+
+ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_vandenBrinketalUPgenes_Ucell_Vlnbycells.svg"),
+       width = 12, height = 8,
+       dpi = 300)
+```
+
+```{r fig.width=20, fig.height=5}
+plot_density(seurat_obj,
+            features = 'vandenBrinketal_up_genes_UCell') + 
+    facet_grid(.~seurat_obj$library_name)
+
+
+ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_vandenBrinketalUPgenes_Ucelldensity.svg"),
+       width = 10, height = 5,
+       dpi = 300)
+```
+
+## Comparing signature with Fresh sDEgenes
+```{r}
+path_r_objects <- here::here("04_GEX_analysis/4_DE_GO_GSEA/results/R_objects")
+path_object_DEgenes <- paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_DEgenes_Fixed_vs_Fresh.rds")
+DE_genes <- readRDS(path_object_DEgenes)
+
+DE_genes_DOWN_df <- DE_genes %>% 
+    dplyr::filter(is_significant & avg_log2FC < 0) %>% 
+    dplyr::select(gene, avg_log2FC, p_val_adj)
+DE_genes_DOWN_list <- DE_genes_DOWN_df$gene
+```
+
+```{r fig.height=4, fig.width=4}
+venndiagram <- VennDiagram::venn.diagram(
+  x = list(DE_genes_DOWN_list, vandenBrinketal_up_genes_list),
+  category.names = c(" ", " "),
+  filename = NULL,
+  fill = c("#023047", "#ffb703"),
+  lty = 'blank',
+  
+  cex = 1.5,
+  fontfamily = "sans",
+
+  cat.cex = 1,  
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.fontfamily = "sans"
+)
+
+grid::grid.newpage()
+grid::grid.draw(venndiagram)
+```
+
+
+```{r}
+signature_genes_intersection <- intersect(vandenBrinketal_up_genes_list, DE_genes_DOWN_list)
+print(signature_genes_intersection)
+```
+
+
+```{r fig.width=12, fig.height=9}
+DotPlot(seurat_obj,
+        features = signature_genes_intersection,
+        group.by = "celltypes",
+        split.by = "sample_protocol",
+        cols = "RdBu",
+        dot.scale = 5
+        ) +
+  coord_flip() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  theme(axis.title = element_blank(),
+        legend.position = "bottom")
+
+ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_vandenBrinketalUPgenes_DEgenes.svg"),
+       width = 12, height = 9,
+       dpi = 300)
+```
+
+
+# SIGNATURE: Warm collagenase-associated on  mouse primary tumors and patient-derived mouse xenografts by O'Flanagan et al.
+```{r fig.width=20, fig.height=8}
+path_signature_OFlanaganetal <- here::here("04_GEX_analysis/5_gene_signatures/published_signatures/signature_OFlanaganetal_collagenase-associated_xCancer_WARMfig3.csv")
+OFlanaganetal__genes <- read_csv(path_signature_OFlanaganetal)
+
+OFlanaganetal_up_genes <- OFlanaganetal__genes %>% 
+  filter(direction == "up-regulated") %>% 
+  dplyr::select(gene)
+
+OFlanaganetal_up_genes_list <- OFlanaganetal_up_genes$gene
+OFlanaganetal_up_genes_list <- str_to_sentence(OFlanaganetal_up_genes_list)
+print(length(OFlanaganetal_up_genes_list))
+print(OFlanaganetal_up_genes_list)
+```
+
+
+### Visualizing genes
+
+```{r fig.width=14, fig.height=8}
+DotPlot(seurat_obj,
+        features = OFlanaganetal_up_genes_list,
+        group.by = "celltypes",
+        split.by = "sample_protocol",
+        cols = "RdBu",
+        dot.scale = 5
+        ) +
+   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+
+### Computing signature
+```{r fig.width=8, fig.height=5}
+# UCELL GENE SIGNATURE SCORE
+## Using positive and negative gene sets, GENE+ or GENE-
+seurat_obj <- AddModuleScore_UCell(seurat_obj, 
+                                   features=list("OFlanaganetal_up_genes" = OFlanaganetal_up_genes_list)
+                                   )
+```
+
+### Visualizing Ucell
+```{r fig.width=8, fig.height=5}
+VlnPlot(
+  seurat_obj,
+  features = "OFlanaganetal_up_genes_UCell",
+  group.by ="sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "..p.format..", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20))&
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1))) 
+```
+
+```{r fig.width=8, fig.height=5}
+VlnPlot(
+  seurat_obj,
+  features = "OFlanaganetal_up_genes_UCell",
+  group.by = "replicate",
+  split.by = "sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "..p.format..", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20))  &
+  aes(alpha=seurat_obj$replicate) &
+  scale_alpha_discrete(range = c(0.5, 1))&
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
+```
+
+```{r fig.width=12, fig.height=8}
+VlnPlot(
+  seurat_obj,
+  features = "OFlanaganetal_up_genes_UCell",
+  group.by = "celltypes",
+  split.by = "sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "p.signif", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20))&
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
+```
+
+```{r fig.width=12, fig.height=8}
+VlnPlot(
+  seurat_obj,
+  features = "OFlanaganetal_up_genes_UCell",
+  group.by = "celltypes",
+  split.by = "library_name",
+  cols = palette_color_library, 
+  pt.size = 0) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "p.signif", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20)) &
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
+
+
+ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_OFlanaganetalUPgenes_Ucell_Vlnbycells.svg"),
+       width = 12, height = 8,
+       dpi = 300)
+```
+
+```{r fig.width=20, fig.height=5}
+plot_density(seurat_obj,
+            features = 'OFlanaganetal_up_genes_UCell') + 
+    facet_grid(.~seurat_obj$library_name)
+
+
+ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_OFlanaganetalUPgenes_Ucelldensity.svg"),
+       width = 10, height = 5,
+       dpi = 300)
+```
+
+
+## Comparing signature with Fresh sDEgenes
+```{r}
+path_r_objects <- here::here("04_GEX_analysis/4_DE_GO_GSEA/results/R_objects")
+path_object_DEgenes <- paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_DEgenes_Fixed_vs_Fresh.rds")
+DE_genes <- readRDS(path_object_DEgenes)
+
+DE_genes_DOWN_df <- DE_genes %>% 
+    dplyr::filter(is_significant & avg_log2FC < 0) %>% 
+    dplyr::select(gene, avg_log2FC, p_val_adj)
+DE_genes_DOWN_list <- DE_genes_DOWN_df$gene
+```
+
+```{r fig.height=4, fig.width=4}
+venndiagram <- VennDiagram::venn.diagram(
+  x = list(DE_genes_DOWN_list, OFlanaganetal_up_genes_list),
+  category.names = c(" ", " "),
+  filename = NULL,
+  fill = c("#023047", "#ffb703"),
+  lty = 'blank',
+  
+  cex = 1.5,
+  fontfamily = "sans",
+
+  cat.cex = 1,  
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.fontfamily = "sans"
+)
+
+grid::grid.newpage()
+grid::grid.draw(venndiagram)
+```
+
+
+```{r}
+signature_genes_intersection <- intersect(OFlanaganetal_up_genes_list, DE_genes_DOWN_list)
+print(signature_genes_intersection)
+```
+
+
+```{r fig.width=12, fig.height=9}
+DotPlot(seurat_obj,
+        features = signature_genes_intersection,
+        group.by = "celltypes",
+        split.by = "sample_protocol",
+        cols = "RdBu",
+        dot.scale = 5
+        ) +
+  coord_flip() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  theme(axis.title = element_blank(),
+        legend.position = "bottom")
+
+ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_OFlanaganetalUPgenes_DEgenes.svg"),
+       width = 12, height = 9,
+       dpi = 300)
+```
+
+
+# SIGNATURE: Warm-dissociation on mouse kidney samples by Denisenko et al.
+```{r fig.width=20, fig.height=8}
+path_signature_Denisenkoatal <- here::here("04_GEX_analysis/5_gene_signatures/published_signatures/signature_Denisenkoetal_warm-dissociation_mKidney_TableS1.csv")
+Denisenkoatal__genes <- read_csv(path_signature_Denisenkoatal)
+
+Denisenkoatal_up_genes <- Denisenkoatal__genes %>% 
+  filter(direction == "up-regulation") %>% 
+  dplyr::select(gene)
+
+Denisenkoatal_up_genes_list <- Denisenkoatal_up_genes$gene
+print(length(Denisenkoatal_up_genes_list))
+print(Denisenkoatal_up_genes_list)
+```
+
+
+### Visualizing genes
+
+```{r fig.width=14, fig.height=8}
+DotPlot(seurat_obj,
+        features = Denisenkoatal_up_genes_list,
+        group.by = "celltypes",
+        split.by = "sample_protocol",
+        cols = "RdBu",
+        dot.scale = 5
+        ) +
+   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+
+### Computing signature
+```{r fig.width=8, fig.height=5}
+# UCELL GENE SIGNATURE SCORE
+## Using positive and negative gene sets, GENE+ or GENE-
+seurat_obj <- AddModuleScore_UCell(seurat_obj, 
+                                   features=list("Denisenkoatal_up_genes" = Denisenkoatal_up_genes_list)
+                                   )
+```
+
+### Visualizing Ucell
+
+```{r fig.width=8, fig.height=5}
+VlnPlot(
+  seurat_obj,
+  features = "Denisenkoatal_up_genes_UCell",
+  group.by ="sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "..p.format..", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20)) &
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
+```
+
+```{r fig.width=8, fig.height=5}
+VlnPlot(
+  seurat_obj,
+  features = "Denisenkoatal_up_genes_UCell",
+  group.by = "replicate",
+  split.by = "sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "..p.format..", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20))  &
+  aes(alpha=seurat_obj$replicate) &
+  scale_alpha_discrete(range = c(0.5, 1))&
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
+```
+
+```{r fig.width=12, fig.height=8}
+VlnPlot(
+  seurat_obj,
+  features = "Denisenkoatal_up_genes_UCell",
+  group.by = "celltypes",
+  split.by = "sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "p.signif", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20))&
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
+```
+
+
+```{r fig.width=12, fig.height=8}
+VlnPlot(
+  seurat_obj,
+  features = "Denisenkoatal_up_genes_UCell",
+  group.by = "celltypes",
+  split.by = "library_name",
+  cols = palette_color_library, 
+  pt.size = 0) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "p.signif", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20)) &
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
+
+
+ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_DenisenkoatalUPgenes_Ucell_Vlnbycells.svg"),
+       width = 12, height = 8,
+       dpi = 300)
+```
+
+```{r fig.width=20, fig.height=5}
+plot_density(seurat_obj,
+            features = 'Denisenkoatal_up_genes_UCell') + 
+    facet_grid(.~seurat_obj$library_name)
+
+
+ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_DenisenkoatalUPgenes_Ucelldensity.svg"),
+       width = 10, height = 5,
+       dpi = 300)
+```
+
+
+
+## Comparing signature with Fresh sDEgenes
+```{r}
+path_r_objects <- here::here("04_GEX_analysis/4_DE_GO_GSEA/results/R_objects")
+path_object_DEgenes <- paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_DEgenes_Fixed_vs_Fresh.rds")
+DE_genes <- readRDS(path_object_DEgenes)
+
+DE_genes_DOWN_df <- DE_genes %>% 
+    dplyr::filter(is_significant & avg_log2FC < 0) %>% 
+    dplyr::select(gene, avg_log2FC, p_val_adj)
+DE_genes_DOWN_list <- DE_genes_DOWN_df$gene
+```
+
+```{r fig.height=4, fig.width=4}
+venndiagram <- VennDiagram::venn.diagram(
+  x = list(DE_genes_DOWN_list, Denisenkoatal_up_genes_list),
+  category.names = c(" ", " "),
+  filename = NULL,
+  fill = c("#023047", "#ffb703"),
+  lty = 'blank',
+  
+  cex = 1.5,
+  fontfamily = "sans",
+
+  cat.cex = 1,  
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.fontfamily = "sans"
+)
+
+grid::grid.newpage()
+grid::grid.draw(venndiagram)
+```
+
+
+```{r}
+signature_genes_intersection <- intersect(Denisenkoatal_up_genes_list, DE_genes_DOWN_list)
+print(signature_genes_intersection)
+```
+
+
+```{r fig.width=12, fig.height=9}
+DotPlot(seurat_obj,
+        features = signature_genes_intersection,
+        group.by = "celltypes",
+        split.by = "sample_protocol",
+        cols = "RdBu",
+        dot.scale = 5
+        ) +
+  coord_flip() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  theme(axis.title = element_blank(),
+        legend.position = "bottom")
+
+ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_DenisenkoetalUPgenes_DEgenes.svg"),
+       width = 12, height = 9,
+       dpi = 300)
+```
+
+
+## Comparing ALL
+```{r fig.height=4, fig.width=4}
+venndiagram <- VennDiagram::venn.diagram(
+  x = list(DE_genes_DOWN_list, 
+           vandenBrinketal_up_genes_list,
+           OFlanaganetal_up_genes_list,
+           Denisenkoatal_up_genes_list),
+  category.names = c(" ", " ", " ", " "),
+  filename = NULL,
+  fill = c("#023047", "#ffb703", "#3DED97", "#E3242B"),
+  lty = 'blank',
+  
+  cex = 1.5,
+  fontfamily = "sans",
+
+  cat.cex = 1,  
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.fontfamily = "sans"
+)
+
+grid::grid.newpage()
+grid::grid.draw(venndiagram)
+```
+
+
+# OTHER SIGNATURES: PBMC-related
+## SIGNATURE: Sampling-time on single-cell PBMC by Massoni-Badosa et al.
+```{r fig.width=20, fig.height=8}
+path_signature_Massonietal <- here::here("04_GEX_analysis/5_gene_signatures/published_signatures/signature_Massonietal_samplingtime_hPBMC.csv")
+Massonietal__genes <- read_csv(path_signature_Massonietal)
+
+Massonietal_up_genes <- Massonietal__genes %>% 
+  filter(direction == "up-regulated") %>% 
+  dplyr::select(gene)
+
+Massonietal_up_genes_list <- Massonietal_up_genes$gene
+Massonietal_up_genes_list <- str_to_sentence(Massonietal_up_genes_list)
+print(length(Massonietal_up_genes_list))
+print(Massonietal_up_genes_list)
+```
+
+
+### Visualizing genes
+
+```{r fig.width=14, fig.height=10}
+DotPlot(seurat_obj,
+        features = Massonietal_up_genes_list,
+        group.by = "celltypes",
+        split.by = "sample_protocol",
+        cols = "RdBu",
+        dot.scale = 5
+        ) +
+   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+
+### Computing signature
+```{r fig.width=8, fig.height=5}
+# UCELL GENE SIGNATURE SCORE
+## Using positive and negative gene sets, GENE+ or GENE-
+seurat_obj <- AddModuleScore_UCell(seurat_obj, 
+                                   features=list("Massonietal_up_genes" = Massonietal_up_genes_list)
+                                   )
+```
+
+### Visualizing Ucell
+
+```{r fig.width=8, fig.height=5}
+VlnPlot(
+  seurat_obj,
+  features = "Massonietal_up_genes_UCell",
+  group.by ="sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "..p.format..", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20)) &
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
+```
+
+```{r fig.width=8, fig.height=5}
+VlnPlot(
+  seurat_obj,
+  features = "Massonietal_up_genes_UCell",
+  group.by = "replicate",
+  split.by = "sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "..p.format..", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20)) &
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
+```
+
+```{r fig.width=12, fig.height=8}
+VlnPlot(
+  seurat_obj,
+  features = "Massonietal_up_genes_UCell",
+  group.by = "celltypes",
+  split.by = "library_name",
+  cols = palette_color_library, 
+  pt.size = 0) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "p.signif", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20)) &
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
+
+
+ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_MassonietalUPgenes_Ucell_Vlnbycells.svg"),
+       width = 12, height = 8,
+       dpi = 300)
+```
+
+```{r fig.width=20, fig.height=5}
+plot_density(seurat_obj,
+            features = 'Massonietal_up_genes_UCell') + 
+    facet_grid(.~seurat_obj$library_name)
+
+
+ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_MassonietalUPgenes_Ucelldensity.svg"),
+       width = 10, height = 5,
+       dpi = 300)
+```
+
+
+### Comparing Massonietal. signature with Fresh sDEgenes
+```{r}
+path_r_objects <- here::here("04_GEX_analysis/4_DE_GO_GSEA/results/R_objects")
+path_object_DEgenes <- paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_DEgenes_Fixed_vs_Fresh.rds")
+DE_genes <- readRDS(path_object_DEgenes)
+
+DE_genes_DOWN_df <- DE_genes %>% 
+    dplyr::filter(is_significant & avg_log2FC < 0) %>% 
+    dplyr::select(gene, avg_log2FC, p_val_adj)
+DE_genes_DOWN_list <- DE_genes_DOWN_df$gene
+```
+
+```{r fig.height=4, fig.width=4}
+venndiagram <- VennDiagram::venn.diagram(
+  x = list(DE_genes_DOWN_list, Massonietal_up_genes_list),
+  category.names = c(" ", " "),
+  filename = NULL,
+  fill = c("#023047", "#ffb703"),
+  lty = 'blank',
+  
+  cex = 1.5,
+  fontfamily = "sans",
+
+  cat.cex = 1,  
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.fontfamily = "sans"
+)
+
+grid::grid.newpage()
+grid::grid.draw(venndiagram)
+```
+
+
+```{r}
+signature_genes_intersection <- intersect(Massonietal_up_genes_list, DE_genes_DOWN_list)
+print(signature_genes_intersection)
+```
+
+
+```{r fig.width=12, fig.height=9}
+DotPlot(seurat_obj,
+        features = signature_genes_intersection,
+        group.by = "celltypes",
+        split.by = "sample_protocol",
+        cols = "RdBu",
+        dot.scale = 5
+        ) +
+  coord_flip() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  theme(axis.title = element_blank(),
+        legend.position = "bottom")
+
+ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_MassonietalUPgenes_DEgenes.svg"),
+       width = 12, height = 8,
+       dpi = 300)
+```
+
+
+
+## SIGNATURE: Ex-vivo blood handling on microarrays by Baechler et al.
+```{r fig.width=20, fig.height=8}
+path_signature_Baechleretal <- here::here("04_GEX_analysis/5_gene_signatures/published_signatures/signature_Baechleretal_storagetime_hPBMC_microarrays.csv")
+Baechleretal__genes <- read_csv(path_signature_Baechleretal)
+
+Baechleretal__genes <- distinct(Baechleretal__genes)
+Baechleretal_up_genes <- Baechleretal__genes %>% 
+  filter(direction == "up-regulated") %>% 
+  dplyr::select(gene)
+
+Baechleretal_up_genes_list <- Baechleretal_up_genes$gene
+Baechleretal_up_genes_list <- str_to_sentence(Baechleretal_up_genes_list)
+print(length(Baechleretal_up_genes_list))
+print(Baechleretal_up_genes_list)
+```
+
+
+### Visualizing genes
+```{r fig.width=14, fig.height=10}
+DotPlot(seurat_obj,
+        features = Baechleretal_up_genes_list,
+        group.by = "celltypes",
+        split.by = "sample_protocol",
+        cols = "RdBu",
+        dot.scale = 5
+        ) +
+   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+```
+
+### Computing signature
+```{r fig.width=8, fig.height=5}
+# UCELL GENE SIGNATURE SCORE
+## Using positive and negative gene sets, GENE+ or GENE-
+seurat_obj <- AddModuleScore_UCell(seurat_obj, 
+                                   features=list("Baechleretal_up_genes" = Baechleretal_up_genes_list)
+                                   )
+```
+
+### Visualizing Ucell
+```{r fig.width=8, fig.height=5}
+VlnPlot(
+  seurat_obj,
+  features = "Baechleretal_up_genes_UCell",
+  group.by ="sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "..p.format..", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20)) &
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
+```
+
+```{r fig.width=8, fig.height=5}
+VlnPlot(
+  seurat_obj,
+  features = "Baechleretal_up_genes_UCell",
+  group.by = "replicate",
+  split.by = "sample_protocol",
+  cols = palette_color_factor, 
+  pt.size = 0) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "..p.format..", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20)) &
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
+```
+
+```{r fig.width=12, fig.height=8}
+VlnPlot(
+  seurat_obj,
+  features = "Baechleretal_up_genes_UCell",
+  group.by = "celltypes",
+  split.by = "library_name",
+  cols = palette_color_library, 
+  pt.size = 0) &
+  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
+               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
+  ggpubr::stat_compare_means(method = "wilcox.test", label = "p.signif", label.y.npc = 1, label.x.npc = 0.5, size=5)&
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        axis.text = element_text(size=18),
+        axis.title.x = element_blank(),
+        strip.text = element_text(size=20)) &
+  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
+
+
+ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_BaechleretalUPgenes_Ucell_Vlnbycells.svg"),
+       width = 12, height = 8,
+       dpi = 300)
+```
+
+```{r fig.width=20, fig.height=5}
+plot_density(seurat_obj,
+            features = 'Baechleretal_up_genes_UCell') + 
+    facet_grid(.~seurat_obj$library_name)
+
+
+ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_BaechleretalUPgenes_Ucelldensity.svg"),
+       width = 10, height = 5,
+       dpi = 300)
+```
+
+
+### Comparing Baechleretal. signature with Fresh sDEgenes
+```{r}
+path_r_objects <- here::here("04_GEX_analysis/4_DE_GO_GSEA/results/R_objects")
+path_object_DEgenes <- paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_DEgenes_Fixed_vs_Fresh.rds")
+DE_genes <- readRDS(path_object_DEgenes)
+
+DE_genes_DOWN_df <- DE_genes %>% 
+    dplyr::filter(is_significant & avg_log2FC < 0) %>% 
+    dplyr::select(gene, avg_log2FC, p_val_adj)
+DE_genes_DOWN_list <- DE_genes_DOWN_df$gene
+```
+
+```{r fig.height=4, fig.width=4}
+venndiagram <- VennDiagram::venn.diagram(
+  x = list(DE_genes_DOWN_list, Baechleretal_up_genes_list),
+  category.names = c(" ", " "),
+  filename = NULL,
+  fill = c("#023047", "#ffb703"),
+  lty = 'blank',
+  
+  cex = 1.5,
+  fontfamily = "sans",
+
+  cat.cex = 1,  
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.fontfamily = "sans"
+)
+
+grid::grid.newpage()
+grid::grid.draw(venndiagram)
+```
+
+
+```{r}
+signature_genes_intersection <- intersect(Baechleretal_up_genes_list, DE_genes_DOWN_list)
+print(signature_genes_intersection)
+```
+
+
+```{r fig.width=12, fig.height=8}
+DotPlot(seurat_obj,
+        features = signature_genes_intersection,
+        group.by = "celltypes",
+        split.by = "sample_protocol",
+        cols = "RdBu",
+        dot.scale = 5
+        ) +
+  coord_flip() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  theme(axis.title = element_blank(),
+        legend.position = "bottom")
+
+ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_BaechleretalUPgenes_DEgenes.svg"),
+       width = 12, height = 8,
+       dpi = 300)
+```
+
+
+# Session Info
+```{r}
+sessionInfo()
+```

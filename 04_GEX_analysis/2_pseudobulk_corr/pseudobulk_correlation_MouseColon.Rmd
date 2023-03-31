@@ -549,7 +549,7 @@ for (cluster in levels(seurat_obj$celltypes)) {
               cor.coef = TRUE, 
               cor.method = "pearson", # Add correlation coefficient.
               font.label = c(15, "plain"),
-              xlab = "Fresh", ylab = "Fixed", 
+              xlab = "Log10(Mean Expression) in Fresh", ylab = "Log10(Mean Expression) in Fixed", 
               title = cluster)
 
     list_gg_cells_downs[[i]] <- gg
@@ -558,11 +558,11 @@ for (cluster in levels(seurat_obj$celltypes)) {
 }
 ```
 
-```{r fig.width=20, fig.height=20}
-cowplot::plot_grid(plotlist = list_gg_cells_downs, ncol = 4)
+```{r fig.width=20, fig.height=12}
+cowplot::plot_grid(plotlist = list_gg_cells_downs, ncol = 5)
 
 ggsave(paste0(path_r_figs_out, "/MouseColon_Pseudobulk_cells_downs.png"),
-       width = 15, height = 15,
+       width = 20, height = 12,
        dpi = 300)
 ```
 

@@ -160,7 +160,7 @@ UpSetR::upset(
   order.by = "freq",
   #group.by = "sets",
   mainbar.y.label = "# HVG", sets.x.label = "# HVG / Library",
-  point.size = 4, line.size = 1,
+  point.size = 4, line.size = 1, text.scale = 2,
   empty.intersections = "on",
   queries = list(
      list(query = UpSetR::intersects, params = list("Fixed 1", "Fresh 1", "Fixed 2" , "Fresh 2"), color = "green", active = T) )
@@ -205,10 +205,10 @@ venndiagram <- VennDiagram::venn.diagram(
   fill = c("#66C2A5", "#FC8D62"),
   lty = 'blank',
   
-  cex = 1,
+  cex = 1.5,
   fontfamily = "sans",
 
-  cat.cex = 0.8,  
+  cat.cex = 1.5,  
   cat.fontface = "bold",
   cat.default.pos = "outer",
   cat.fontfamily = "sans"

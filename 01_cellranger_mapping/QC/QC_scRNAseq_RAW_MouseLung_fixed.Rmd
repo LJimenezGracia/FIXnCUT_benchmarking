@@ -148,7 +148,7 @@ write_csv(x = seqreads_genes_df,
 
 
 ## # Genes / Seq reads
-```{r fig.width=10, fig.height=6}
+```{r fig.width=8, fig.height=5}
 seqreads_genes_df <- read.csv("tables/MouseLung_fixed_LibGenesvsReads.csv")
 
 seqreads_genes_df %>%
@@ -179,27 +179,27 @@ seqreads_genes_df %>%
 
 seqreads_genes_df %>%
   ggplot(aes(x = sequenced_reads, y = detected_genes, color = sample_protocol, fill=sample_protocol, linetype = replicate, shape=replicate)) + 
-  geom_point(size=3) +
-  scale_y_continuous(labels = scales::comma) + 
-  scale_x_log10(labels = scales::comma) +
-  stat_smooth(method='lm', se = TRUE) +
+  geom_point(size=4) +
+  scale_y_continuous() + 
+  scale_x_log10(labels = scales::label_number(scale = 1e-6), breaks = seq(10000000, 130000000, by = 10000001)) +
+  stat_smooth(method='lm', se = TRUE, size = 1) +
   theme_classic() +
   scale_color_manual(values = palette_color_factor) +
   scale_fill_manual(values = palette_color_factor) +
   #geom_text() + 
-  labs(x = "# Sequencing Reads",
+  labs(x = "# Sequencing Reads (in millions)",
      y = "# Detected Genes",
      color = "Protocol") +
-    theme(axis.title = element_text(size = 16),
-          axis.text = element_text(size = 12),
+    theme(axis.title = element_text(size = 18),
+          axis.text = element_text(size = 14),
           strip.placement = "outside",
           strip.background = element_rect(colour = NA),
           legend.position = c(0.9, 0.2),
-          legend.text = element_text(size = 14),
+          legend.text = element_text(size = 16),
           legend.title=element_blank()) +
     guides(fill = guide_legend(override.aes = list(color = NA), reverse = TRUE), 
-           linetype = guide_legend(override.aes = list(color = "black", fill=NA)),
-           color = FALSE
+                      linetype = guide_legend(override.aes = list(color = "black", fill=NA)),
+           color=FALSE
            )
 
 ggsave("figs/MouseLung_fixed_LibGenesvsReads.svg",
@@ -295,7 +295,7 @@ write_csv(x = cell_info_df,
 
 
 ## # Genes / # Seq reads (per cell)
-```{r fig.width=10, fig.height=7}
+```{r fig.width=8, fig.height=5}
 cell_info_df <- read.csv("tables/MouseLung_fixed_LibGenes-UMIsvsReadsCell.csv")
 
 gg <- cell_info_df %>%
@@ -332,7 +332,7 @@ ggsave("figs/MouseLung_fixed_LibGenesvsReadsCell.svg",
 
 ## # UMIs / # Seq reads (per cell)
 
-```{r fig.width=10, fig.height=6}
+```{r fig.width=8, fig.height=5}
 cell_info_df <- read.csv("tables/MouseLung_fixed_LibGenes-UMIsvsReadsCell.csv")
 
 gg <- cell_info_df %>%
@@ -430,12 +430,12 @@ write_csv(x = detectedgenes,
 
 
 ## Cumulative # Genes / # cells
-```{r fig.width=10, fig.height=7}
+```{r fig.width=8, fig.height=5}
 detectedgenes <- read.csv("tables/MouseLung_fixed_CumulativeGenes.csv")
 
 detectedgenes %>% 
   ggplot(aes(x = num_cells, y = detected_genes, color = sample_protocol, shape = replicate)) +
-  geom_point(size=2) +
+  geom_point(size=3) +
   scale_color_manual(values = palette_color_factor) +
   scale_fill_manual(values = palette_color_factor) +
   labs(x = "# Sampled Cells",

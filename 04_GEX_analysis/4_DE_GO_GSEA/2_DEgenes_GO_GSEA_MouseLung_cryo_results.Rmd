@@ -49,7 +49,7 @@ group_2_list <- c("Cryopreserved", "Cryopreserved", "Fixed")
 ```
 
 # DEA
-```{r fig.width=10, fig.height=7}
+```{r fig.width=9, fig.height=6}
 for (index in 1:length(comparison_name_list)) {
   comparison_name <- comparison_name_list[[index]]
   group_1 <- group_1_list[[index]]
@@ -76,7 +76,7 @@ for (index in 1:length(comparison_name_list)) {
   # Volcano Plot
   gg_volcanoplot <- gg_volcano_DEgenes(
   DEgenes_df = DE_genes, 
-  title = comparison_name, 
+  title = "", 
   ident_1 = group_1,
   ident_2 = group_2,
   threshold_log2FC = 1,
@@ -86,7 +86,7 @@ for (index in 1:length(comparison_name_list)) {
   
   # Save results
   path_volcanoplot <- paste0(path_r_figs, "/FIXnCUT_MouseLung_cryopreserved_DEA_", comparison_name, ".svg")
-  ggsave(filename = path_volcanoplot, plot = gg_volcanoplot, width = 12, height = 8, dpi = 300)
+  ggsave(filename = path_volcanoplot, plot = gg_volcanoplot, width = 9, height = 6, dpi = 300)
 }
 ```
 

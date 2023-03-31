@@ -47,8 +47,8 @@ metadata_variables_confounder <- c("nCount_RNA", "nFeature_RNA", "gem_id",
 
 palette_color_factor <- c("Fresh" = "#66C2A5", 
                           "Fixed" ="#FC8D62",
-                          "Cryopreserved" ="#8DA0CB",
-                          "Fixed+Cryopreserved" = "#E78AC3")
+                          "Cryo" ="#8DA0CB",
+                          "Fixed+Cryo" = "#E78AC3")
 
 set.seed(1234) # for reproducibility 
 ```
@@ -73,12 +73,18 @@ DT::datatable(metadata, options = list(scrollX = TRUE))
 seurat_obj <- readRDS(here::here("03_clustering_annotation/results/R_objects/FIXnCUT_HumanColon_filtered_clustering_annotation_cleaned.rds"))
 seurat_obj
 
+seurat_obj$library_name <- as.character(seurat_obj$library_name)
+seurat_obj$library_name[seurat_obj$library_name == "Cryopreserved"] <- "Cryo"
+seurat_obj$library_name[seurat_obj$library_name == "Fixed+Cryopreserved"] <- "Fixed+Cryo"
+
+seurat_obj$library_name <- factor(x = seurat_obj$library_name, 
+                                  levels = c("Fresh", "Fixed", "Cryo", "Fixed+Cryo"))
 
 seurat_obj$celltypes <- factor(x = seurat_obj$celltypes,
-                                    levels = c("CD4+ T cells", "CD8+ T cells", "NK cells", "M0 macrophages", "M1 macrophages", 
+                                    levels = c("CD4+ T cells", "CD8+ T cells", "NK cells", "M0 macrophages", "M2 macrophages", 
                                                "B cells", "B cells cycling", "Plasma cells", "Plasmablasts", "Mast cells",
-                                                "Colonocytes 1", "Colonocytes 2", "Colonocytes PLCG2+", "Intestinal BEST4+OTOP2+ cells",
-                                               "Transit-amplifying (TA) cells cycling", "Mature Goblet", "Tuft cells", 
+                                                "Colonocytes 1", "Colonocytes 2", "Colonocytes PLCG2+", "Colonocytes BEST4+OTOP2+",
+                                               "Transit-amplifying (TA) cells", "Goblet cells", "Tuft cells", 
                                                "Endothelium", "Myofibroblasts", "Stromal cells", "Glia", "Cycling cells"))
 ```
 
@@ -120,7 +126,7 @@ ggsave(paste0(path_r_figs_out, "/HumanColon_UMAP.svg"),
 DimPlot(
   seurat_obj,
   reduction = "umap",
-  group.by = "sample_protocol",
+  group.by = "library_name",
   split.by = "library_name") +
   scale_color_manual(values = palette_color_factor) &
   labs(title = "", color = "") + NoLegend()
@@ -131,14 +137,14 @@ ggsave(paste0(path_r_figs_out, "/HumanColon_UMAPsplit.svg"),
 ```
 
 # QC metrics
-```{r fig.height=10, fig.width=15}
+```{r fig.height=4, fig.width=10}
 VlnPlot(seurat_obj,
-        features = c("nCount_RNA", "nFeature_RNA", "pct_mt", "pct_rb"),
-        split.by = "sample_protocol",
+        features = c("nCount_RNA", "nFeature_RNA", "pct_mt"),
+        split.by = "library_name",
         group.by = "library_name",
         pt.size = 0,
         log = TRUE,
-        ncol = 2
+        ncol = 3
         ) &
   scale_fill_manual(values = palette_color_factor) &
     theme(axis.text.x = element_text(angle = 0, hjust = 0.5),
@@ -150,7 +156,7 @@ VlnPlot(seurat_obj,
   #                               label = "p.format", label.y.npc = 0.95)
 
 ggsave(paste0(path_r_figs_out, "/HumanColon_QCmetrics.svg"),
-       width = 10, height = 10,
+       width = 10, height = 4,
        dpi = 300)
 ```
 
@@ -162,9 +168,9 @@ seurat_metadata <-  seurat_obj@meta.data %>%
 ```
 
 
-```{r fig.height=10, fig.width=20}
+```{r fig.height=8, fig.width=16}
 ggplot(seurat_metadata, 
-       aes(x = celltypes, y = qc_metric_value, fill = sample_protocol)) +
+       aes(x = celltypes, y = qc_metric_value, fill = library_name)) +
   geom_boxplot() +
   theme_classic() +
     #ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
@@ -185,7 +191,7 @@ ggplot(seurat_metadata,
            )
 
 ggsave(paste0(path_r_figs_out, "/HumanColon_QCmetricsCell.svg"),
-       width = 20, height = 10,
+       width = 16, height = 8,
        dpi = 300)
 ```
 
@@ -197,7 +203,7 @@ palette_color_cells <- c("CD4+ T cells" = "#E2711D",
                          "NK cells" = "#FFB627",
                          
                          "M0 macrophages" = "#590D22",
-                         "M1 macrophages" = "#A4133C",
+                         "M2 macrophages" = "#A4133C",
                          "B cells" = "#7371FC", 
                          "B cells cycling" = "#ffd6ff",
                          "Plasma cells" = "#c8b6ff",
@@ -208,9 +214,9 @@ palette_color_cells <- c("CD4+ T cells" = "#E2711D",
                          "Colonocytes 1" = "#2f3e46",
                          "Colonocytes 2" = "#184E77",
                          "Colonocytes PLCG2+" = "#1A759F",
-                         "Intestinal BEST4+OTOP2+ cells" = "#34A0A4",
-                         "Transit-amplifying (TA) cells cycling"= "#52B69A",
-                         "Mature Goblet"  = "#76C893",
+                         "Colonocytes BEST4+OTOP2+" = "#34A0A4",
+                         "Transit-amplifying (TA) cells"= "#52B69A",
+                         "Goblet cells"  = "#76C893",
                          "Tuft cells" = "#99D98C",
                          "Endothelium" = "#BB9457",
                          "Myofibroblasts" = "#432818",
@@ -237,7 +243,7 @@ ggsave(paste0(path_r_figs_out, "/HumanColon_UMAPcelltypes.svg"),
 
 
 # Celltypes Proportions
-```{r fig.width=10, fig.height=6}
+```{r fig.width=12, fig.height=6}
 dittoSeq::dittoBarPlot(seurat_obj, 
                              "celltypes",
                              group.by = "library_name",
@@ -247,24 +253,24 @@ dittoSeq::dittoBarPlot(seurat_obj,
                              color.panel = palette_color_cells) +
   coord_flip() + 
   labs(title = "") +
-  theme(axis.text.y = element_text(size=20),
+  theme(axis.text.y = element_text(size=20, hjust = 0.5, angle = 90),
         axis.text.x = element_text(angle = 0, hjust = 0.5, size=14),
         axis.title.x = element_text(size=20),
         axis.title.y = element_blank())
 
 ggsave(paste0(path_r_figs_out, "/HumanColon_CellProp.svg"),
-       width = 10, height = 5,
+       width = 12, height = 6,
        dpi = 300)
 ```
 
 # Gene markers
 
-```{r fig.width=14, fig.height=7}
+```{r fig.width=12, fig.height=7}
 genes_of_interest <- c("CD3D", "CD4", # cd4+ T cells
                        "CD8A", # CD8+ T cells
                        "KLRD1", # NK cells
                        "CD68", "C1QA", "TYROBP", "FTL", # M0 macrophages
-                       "CD86", "SELENOP", "CCL3", # M1 macrophages
+                       "STAB1", "FOLR2", # M2 macrophages
                        "CD79A", "MS4A1", "HLA-DRA", # B cells
                        "IGKC", "IGHA1", "JCHAIN",# Plasma cells
                        "PRDM1", "CD27", # Plasmablasts
@@ -299,7 +305,7 @@ DotPlot(seurat_obj,
         legend.position = "bottom")
 
 ggsave(paste0(path_r_figs_out, "/HumanColon_DotplotMarkers.svg"),
-       width = 14, height = 7,
+       width = 12, height = 7,
        dpi = 300)
 ```
 

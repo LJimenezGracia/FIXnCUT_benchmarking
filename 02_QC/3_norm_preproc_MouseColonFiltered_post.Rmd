@@ -125,6 +125,8 @@ summary(Matrix::colSums(seurat_obj@assays$RNA@data[, ] > 0))
 
 
 ## Independent HVF
+
+
 ```{r fig.height=5, fig.width=10}
 seurat_obj_list <- SplitObject(seurat_obj, split.by = "library_name")
 
@@ -151,6 +153,28 @@ UpSetR::upset(
      list(query = UpSetR::intersects, params = list("Fresh", "Fixed"), color = "green", active = T) )
 )
 ```
+
+```{r fig.height=4, fig.width=4.5}
+venndiagram <- VennDiagram::venn.diagram(
+  x = list(fresh_HVG, fixed_HVG),
+  category.names = c("Fresh", "Fixed"),
+  filename = NULL,
+  fill = c("#FC8D62", "#66C2A5"),
+  lty = 'blank',
+  
+  cex = 1.5,  
+  fontfamily = "sans",
+
+  cat.cex = 1.5,  
+  cat.fontface = "bold",
+  cat.default.pos = "outer",
+  cat.fontfamily = "sans"
+)
+
+grid::grid.newpage()
+grid::grid.draw(venndiagram)
+```
+
 
 ## Common HVF
 ```{r fig.width=7, fig.height=5}

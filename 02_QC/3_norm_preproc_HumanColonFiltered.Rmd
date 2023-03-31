@@ -147,17 +147,17 @@ UpSetR::upset(
   UpSetR::fromList(list(
     "Fresh" = fresh_HVG,
     "Fixed" = fixed_HVG,
-    "Cryopreserved" = cryo_HVG,
-    "Fixed+Cryopreserved" = fixcryo_HVG
+    "Cryo" = cryo_HVG,
+    "Fixed+Cryo" = fixcryo_HVG
   )),
   nsets = 6,
   order.by = "freq",
   #group.by = "sets",
   mainbar.y.label = "# HVG", sets.x.label = "# HVG / Library",
-  point.size = 4, line.size = 1,
+  point.size = 4, line.size = 1, text.scale = 2,
   empty.intersections = "on",
   queries = list(
-     list(query = UpSetR::intersects, params = list("Fresh", "Fixed", "Cryopreserved", "Fixed+Cryopreserved"), color = "green", active = T) )
+     list(query = UpSetR::intersects, params = list("Fresh", "Fixed", "Cryo", "Fixed+Cryo"), color = "green", active = T) )
 )
 ```
 

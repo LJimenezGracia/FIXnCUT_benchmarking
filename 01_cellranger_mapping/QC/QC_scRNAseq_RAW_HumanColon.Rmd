@@ -24,6 +24,7 @@ In this Rmarkdown document, we are going to
 ```{r warning = FALSE, message = FALSE}
 library(tidyverse)
 library(Seurat)
+library(scales)
 library(gt)
 ```
 
@@ -40,8 +41,8 @@ set.seed(1234) # for reproducibility
 
 palette_color_factor <- c("Fresh" = "#66C2A5", 
                           "Fixed" ="#FC8D62",
-                          "Cryopreserved" ="#8DA0CB",
-                          "Fixed+Cryopreserved" = "#E78AC3")
+                          "Cryo" ="#8DA0CB",
+                          "Fixed+Cryo" = "#E78AC3")
 ```
 
 ## Load metadata
@@ -59,8 +60,8 @@ metadata <- metadata %>%
 # Modify metadata
 metadata$library_name[metadata$library_name == "Human colon_fresh"] <- "Fresh"
 metadata$library_name[metadata$library_name == "Human colon_fixed"] <- "Fixed"
-metadata$library_name[metadata$library_name == "Human colon_cryopreserved"] <- "Cryopreserved"
-metadata$library_name[metadata$library_name == "Human colon_fixed_cryopreserved"] <- "Fixed+Cryopreserved"
+metadata$library_name[metadata$library_name == "Human colon_cryopreserved"] <- "Cryo"
+metadata$library_name[metadata$library_name == "Human colon_fixed_cryopreserved"] <- "Fixed+Cryo"
 
 metadata$library <- metadata$library_name
 # sample_protocol
@@ -143,11 +144,13 @@ write_csv(x = seqreads_genes_df,
 
 ## # Genes / Seq reads
 
-```{r fig.width=10, fig.height=6}
+```{r fig.width=8, fig.height=5}
 seqreads_genes_df <- read.csv("tables/HumanColon_LibGenesvsReads.csv")
 
-
-seqreads_genes_df$library <- factor(x = seqreads_genes_df$library, levels = c("Fresh", "Fixed", "Cryopreserved","Fixed+Cryopreserved"))
+seqreads_genes_df$library[seqreads_genes_df$library == "Cryopreserved"] <- "Cryo"
+seqreads_genes_df$library[seqreads_genes_df$library == "Fixed+Cryopreserved"] <- "Fixed+Cryo"
+seqreads_genes_df$library <- factor(x = seqreads_genes_df$library, 
+                                    levels = c("Fresh", "Fixed", "Cryo","Fixed+Cryo"))
 
 seqreads_genes_df %>%
   ggplot(aes(x = sequenced_reads, y = detected_genes, color = library, fill=library, label=slope_gene)) +
@@ -176,25 +179,24 @@ seqreads_genes_df %>%
 
 seqreads_genes_df %>%
   ggplot(aes(x = sequenced_reads, y = detected_genes, color = library,  fill=library)) + # label = slope_gene,
-  geom_point() +
-  scale_y_continuous(labels = scales::comma) + 
-  scale_x_log10(labels = scales::comma) +
-  stat_smooth(method='lm', se = TRUE) +
+  geom_point(size=4) +
+  scale_x_log10(labels = label_number(scale = 1e-6), breaks = seq(10000000, 130000000, by = 20000000)) +
+  stat_smooth(method='lm', se = TRUE, size = 1) +
   theme_classic() +
   scale_color_manual(values = palette_color_factor) +
   scale_fill_manual(values = palette_color_factor) +
-  labs(x = "# Sequencing Reads",
+  #geom_text() + 
+  labs(x = "# Sequencing Reads (in millions)",
      y = "# Detected Genes",
      color = "Protocol") +
-    theme(axis.title = element_text(size = 14),
-          axis.text = element_text(size = 10),
+    theme(axis.title = element_text(size = 18),
+          axis.text = element_text(size = 14),
           strip.placement = "outside",
           strip.background = element_rect(colour = NA),
-          legend.position = c(0.85, 0.2),
-          legend.text = element_text(size = 12),
+          legend.position = c(0.9, 0.2),
+          legend.text = element_text(size = 16),
           legend.title=element_blank()) +
     guides(fill = guide_legend(override.aes = list(color = NA), reverse = TRUE), 
-                      linetype = guide_legend(override.aes = list(color = "black", fill=NA)),
            color = FALSE
            )
 
@@ -286,10 +288,12 @@ write_csv(x = cell_info_df,
 
 
 ## # Genes / # Seq reads (per cell)
-```{r fig.width=12, fig.height=8}
+```{r fig.width=8, fig.height=5}
 cell_info_df <- read.csv("tables/HumanColon_LibGenes-UMIsvsReadsCell.csv")
 
-cell_info_df$library <- factor(x = cell_info_df$library, levels = c("Fresh", "Fixed", "Cryopreserved", "Fixed+Cryopreserved"))
+cell_info_df$library[cell_info_df$library == "Cryopreserved"] <- "Cryo"
+cell_info_df$library[cell_info_df$library == "Fixed+Cryopreserved"] <- "Fixed+Cryo"
+cell_info_df$library <- factor(x = cell_info_df$library, levels = c("Fresh", "Fixed", "Cryo", "Fixed+Cryo"))
 
 gg <- cell_info_df %>%
   ggplot(aes(x = reads, y = gene, color = library, fill = library)) +
@@ -308,7 +312,7 @@ gg <- cell_info_df %>%
           axis.text = element_text(size = 12),
           strip.placement = "outside",
           strip.background = element_rect(colour = NA),
-          legend.position = c(0.8, 0.2),
+          legend.position = c(0.85, 0.2),
           legend.text = element_text(size = 14),
           legend.title=element_blank()) +
     guides(fill = guide_legend(override.aes = list(color = NA), reverse = TRUE), 
@@ -324,10 +328,12 @@ ggsave("figs/HumanColon_LibGenesvsReadsCell.svg",
 
 ## # UMIs / # Seq reads (per cell)
 
-```{r fig.width=12, fig.height=8}
+```{r fig.width=8, fig.height=5}
 cell_info_df <- read.csv("tables/HumanColon_LibGenes-UMIsvsReadsCell.csv")
 
-cell_info_df$library <- factor(x = cell_info_df$library, levels = c("Fresh", "Fixed", "Cryopreserved","Fixed+Cryopreserved"))
+cell_info_df$library[cell_info_df$library == "Cryopreserved"] <- "Cryo"
+cell_info_df$library[cell_info_df$library == "Fixed+Cryopreserved"] <- "Fixed+Cryo"
+cell_info_df$library <- factor(x = cell_info_df$library, levels = c("Fresh", "Fixed", "Cryo", "Fixed+Cryo"))
 
 gg <- cell_info_df %>%
   ggplot(aes(x = reads, y = umi, color = library, fill = library)) +
@@ -346,7 +352,7 @@ gg <- cell_info_df %>%
           axis.text = element_text(size = 12),
           strip.placement = "outside",
           strip.background = element_rect(colour = NA),
-          legend.position = c(0.8, 0.2),
+          legend.position = c(0.85, 0.2),
           legend.text = element_text(size = 14),
           legend.title=element_blank()) +
     guides(fill = guide_legend(override.aes = list(color = NA), reverse = TRUE), 
@@ -370,7 +376,6 @@ seurat_obj
 ```
 
 
-## Cumulative # Genes / # cells
 ```{r}
 size_list <- seq(1, 100, by=2)
 seurat_obj$library_name <- as.factor(seurat_obj$library_name)
@@ -418,27 +423,30 @@ write_csv(x = detectedgenes,
           file = "tables/HumanColon_CumulativeGenes.csv")
 ```
 
+## Cumulative # Genes / # cells
 
-```{r fig.width=10, fig.height=6}
+```{r fig.width=8, fig.height=5}
 detectedgenes <- read.csv("tables/HumanColon_CumulativeGenes.csv")
 
-detectedgenes$library_name <- factor(x = detectedgenes$library_name, levels = c("Fresh", "Fixed", "Cryopreserved","Fixed+Cryopreserved"))
+detectedgenes$library_name[detectedgenes$library_name == "Cryopreserved"] <- "Cryo"
+detectedgenes$library_name[detectedgenes$library_name == "Fixed+Cryopreserved"] <- "Fixed+Cryo"
+detectedgenes$library_name <- factor(x = detectedgenes$library_name, levels = c("Fresh", "Fixed", "Cryo","Fixed+Cryo"))
 
 
 detectedgenes %>% 
   ggplot(aes(x = num_cells, y = detected_genes, color = library_name)) +
-  geom_point() +
+  geom_point(size=3) +
   scale_fill_manual(values = palette_color_factor) +
   scale_color_manual(values = palette_color_factor) +
   labs(x = "Number of sampled cells",
      y = "Detected genes") +
   theme_classic() +
-  theme(axis.title = element_text(size = 16),
-          axis.text = element_text(size = 12),
+    theme(axis.title = element_text(size = 18),
+          axis.text = element_text(size = 14),
           strip.placement = "outside",
           strip.background = element_rect(colour = NA),
-          legend.position = c(0.85, 0.2),
-          legend.text = element_text(size = 14),
+          legend.position = c(0.9, 0.2),
+          legend.text = element_text(size = 16),
           legend.title=element_blank()) +
     guides(color = guide_legend(override.aes = list(fill = NA), reverse = TRUE))
 

@@ -153,10 +153,10 @@ venndiagram <- VennDiagram::venn.diagram(
   fill = c("#66C2A5", "#FC8D62"),
   lty = 'blank',
   
-  cex = 0.8,
+  cex = 1.5,
   fontfamily = "sans",
 
-  cat.cex = 0.8,  
+  cat.cex = 1.5,  
   cat.fontface = "bold",
   cat.default.pos = "outer",
   cat.fontfamily = "sans"

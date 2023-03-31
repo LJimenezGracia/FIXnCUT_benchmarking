@@ -69,7 +69,7 @@ DT::datatable(metadata, options = list(scrollX = TRUE))
 
 
 
-# Pseudo-bulk gene expression profiles & correlation
+
 
 ```{r}
 # Load Seurat object
@@ -85,6 +85,7 @@ seurat_obj$celltypes <- factor(x = seurat_obj$celltypes,
                          "Progenitor cells","Cycling cells"))
 ```
 
+# Pseudo-bulk gene expression profiles & correlation
 
 ```{r}
 # Extract raw counts and metadata to create SingleCellExperiment object
@@ -549,7 +550,7 @@ for (cluster in levels(seurat_obj$celltypes)) {
               cor.coef = TRUE, 
               cor.method = "pearson", # Add correlation coefficient.
               font.label = c(15, "plain"),
-              xlab = "Fresh", ylab = "Fixed", 
+              xlab = "Log10(Mean Expression) in Fresh", ylab = "Log10(Mean Expression) in Fixed", 
               title = cluster)
 
     list_gg_cells_downs[[i]] <- gg
@@ -558,11 +559,11 @@ for (cluster in levels(seurat_obj$celltypes)) {
 }
 ```
 
-```{r fig.width=20, fig.height=20}
+```{r fig.width=14, fig.height=14}
 cowplot::plot_grid(plotlist = list_gg_cells_downs, ncol = 4)
 
 ggsave(paste0(path_r_figs_out, "/HumanPBMC_Pseudobulk_cells_downs.png"),
-       width = 15, height = 15,
+       width = 14, height = 14,
        dpi = 300)
 ```
 

@@ -75,10 +75,10 @@ DT::datatable(metadata, options = list(scrollX = TRUE))
 # Load Seurat object
 seurat_obj <- readRDS(str_c(path_r_objects, "/FIXnCUT_HumanColon_filtered_clustering_annotation_cleaned.rds"))
 seurat_obj$celltypes <- factor(x = seurat_obj$celltypes,
-                                    levels = c("CD4+ T cells", "CD8+ T cells", "NK cells", "M0 macrophages", "M1 macrophages", 
+                                    levels = c("CD4+ T cells", "CD8+ T cells", "NK cells", "M0 macrophages", "M2 macrophages", 
                                                "B cells", "B cells cycling", "Plasma cells", "Plasmablasts", "Mast cells",
-                                                "Colonocytes 1", "Colonocytes 2", "Colonocytes PLCG2+", "Intestinal BEST4+OTOP2+ cells",
-                                               "Transit-amplifying (TA) cells cycling", "Mature Goblet", "Tuft cells", 
+                                                "Colonocytes 1", "Colonocytes 2", "Colonocytes PLCG2+", "Colonocytes BEST4+OTOP2+",
+                                               "Transit-amplifying (TA) cells", "Goblet cells", "Tuft cells", 
                                                "Endothelium", "Myofibroblasts", "Stromal cells", "Glia", "Cycling cells"))
 ```
 
@@ -553,6 +553,8 @@ for (cluster in levels(seurat_obj$celltypes)) {
   }
 }
 ```
+
+
 ### Fixed vs Fresh
 ```{r}
 # Only fixed vs fresh!
@@ -590,7 +592,8 @@ for (cluster in levels(seurat_obj$celltypes)) {
               conf.int = TRUE, # Add confidence interval
               cor.coef = TRUE, 
               cor.method = "pearson", # Add correlation coefficient.
-              xlab = "Fresh", ylab = "Fixed", 
+              xlab = "Log10(Mean Expression) in Fresh", ylab = "Log10(Mean Expression) in Fixed", 
+              font.label = c(20, "plain"),
               title = cluster)
 
     list_gg_cells_downs[[i]] <- gg
@@ -599,11 +602,11 @@ for (cluster in levels(seurat_obj$celltypes)) {
 }
 ```
 
-```{r fig.width=15, fig.height=15}
-cowplot::plot_grid(plotlist = list_gg_cells_downs, ncol = 4)
+```{r fig.width=27, fig.height=7}
+cowplot::plot_grid(plotlist = list_gg_cells_downs, ncol = 8)
 
 ggsave(paste0(path_r_figs_out, "/HumanColon_Pseudobulk_FreshFixedcells_downs.png"),
-       width = 15, height = 15,
+       width = 27, height = 7,
        dpi = 300)
 ```
 
@@ -644,7 +647,8 @@ for (cluster in levels(seurat_obj$celltypes)) {
               conf.int = TRUE, # Add confidence interval
               cor.coef = TRUE, 
               cor.method = "pearson", # Add correlation coefficient.
-              xlab = "Cryopreserved", ylab = "Fixed+Cryopreserved", 
+              xlab = "Log10(Mean Expression) in Cryo", ylab = "Log10(Mean Expression) in Fixed+Cryo", 
+              font.label = c(20, "plain"),
               title = cluster)
 
     list_gg_cells_downs[[i]] <- gg
@@ -653,11 +657,11 @@ for (cluster in levels(seurat_obj$celltypes)) {
 }
 ```
 
-```{r fig.width=15, fig.height=15}
-cowplot::plot_grid(plotlist = list_gg_cells_downs, ncol = 4)
+```{r fig.width=27, fig.height=7}
+cowplot::plot_grid(plotlist = list_gg_cells_downs, ncol = 8)
 
 ggsave(paste0(path_r_figs_out, "/HumanColon_Pseudobulk_FCCryocells_downs.png"),
-       width = 15, height = 15,
+       width = 27, height = 7,
        dpi = 300)
 ```
 

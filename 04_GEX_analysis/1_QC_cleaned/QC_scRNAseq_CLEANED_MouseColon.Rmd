@@ -150,7 +150,7 @@ ggsave(paste0(path_r_figs_out, "/MouseColon_UMAPsplit.svg"),
 
 
 # QC metrics
-```{r fig.height=5, fig.width=15}
+```{r fig.height=5, fig.width=10}
 VlnPlot(seurat_obj,
         features = c("nCount_RNA", "nFeature_RNA", "pct_mt"),
         group.by = "library_name",
@@ -170,7 +170,7 @@ VlnPlot(seurat_obj,
   #                               label = "p.format", label.y.npc = 0.95)
 
 ggsave(paste0(path_r_figs_out, "/MouseColon_QCmetrics.svg"),
-       width = 20, height = 6,
+       width = 10, height = 6,
        dpi = 300)
 ```
 
@@ -182,7 +182,7 @@ seurat_metadata <-  seurat_obj@meta.data %>%
 ```
 
 
-```{r fig.height=10, fig.width=20}
+```{r fig.height=7, fig.width=15}
 ggplot(seurat_metadata, 
        aes(x = celltypes, y = qc_metric_value, fill = library_name)) +
   introdataviz::geom_split_violin() +
@@ -195,18 +195,13 @@ ggplot(seurat_metadata,
   labs(x = "Cell-types", y="") +
   facet_wrap(~qc_metric, scales = "free_y", nrow = 3) + 
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-        axis.text = element_text(size=18),
+        axis.text = element_text(size=15),
         axis.title = element_blank(),
-        strip.text = element_text(size=20),
-          legend.position = "right",
-          legend.text = element_text(size = 20),
-          legend.title=element_blank()) +
-    guides(fill = guide_legend(override.aes = list(color = NA), reverse = TRUE), 
-           color = FALSE
-           )
+        strip.text = element_text(size=18),
+          legend.position = "none")
 
 ggsave(paste0(path_r_figs_out, "/MouseColon_QCmetricsCell.svg"),
-       width = 20, height = 10,
+       width = 15, height = 7,
        dpi = 300)
 ```
 
@@ -233,6 +228,27 @@ ggsave(paste0(path_r_figs_out, "/MouseColon_UMAPcelltypes.svg"),
 
 
 # Celltypes Proportions
+```{r fig.width=10, fig.height=4}
+dittoSeq::dittoBarPlot(seurat_obj, 
+                             "celltypes",
+                             group.by = "library_name",
+                             scale = "percent",
+                            retain.factor.levels = TRUE,
+                       legend.show  = FALSE,
+                             color.panel = palette_color_cells) +
+  coord_flip() + 
+  labs(title = "") +
+  theme(axis.text.y = element_text(size=20, hjust = 0.5, angle = 90),
+        axis.text.x = element_text(angle = 0, hjust = 0.5, size=14),
+        axis.title.x = element_text(size=20),
+        axis.title.y = element_blank())
+
+ggsave(paste0(path_r_figs_out, "/MouseColon_CellProp_simple.svg"),
+       width = 10, height = 4,
+       dpi = 300)
+```
+
+
 ```{r fig.width=10, fig.height=7}
 gg_c <- dittoSeq::dittoBarPlot(seurat_obj, 
                              "celltypes",
@@ -274,7 +290,7 @@ ggsave(paste0(path_r_figs_out, "/MouseColon_CellProp.svg"),
 
 
 # Dotplot gene markers
-```{r fig.width=12, fig.height=6}
+```{r fig.width=5, fig.height=9}
 genes_of_interest <- c("Cd3e", "Cd3d", "Klrd1", # T-NK cells, 
                        "Cd14", "Apoe", "C1qa", # Myeloid cells
                        "Ebf1", "Cd79a", "Ms4a1", "H2-Eb1", # Immature B cells 
@@ -301,13 +317,20 @@ DotPlot(seurat_obj,
         #col.max = 3,
         #col.min = 0,
         cols = "RdYlBu",
-        dot.scale = 8) +
+        dot.scale = 6) +
   theme(axis.text.x = element_text(angle=90, hjust = 1, vjust = 0.5),
         axis.title = element_blank(),
-        legend.position = "bottom")
+        legend.position = "bottom") +
+  coord_flip() +
+  guides(color = guide_legend(ncol = 2)) +
+  labs(color = "Average Expression", size = "Percent Expressed") +
+  guides(
+    color = guide_colorbar(ncol = 4, title.position = "top", title.hjust = 0.5, label.hjust = 0.5, order = 1),
+    size = guide_legend(ncol = 4, title.position = "top", title.hjust = 0.5, label.hjust = 0.5, order = 2)
+    )
 
 ggsave(paste0(path_r_figs_out, "/MouseColon_DotplotMarkers.svg"),
-       width = 14, height = 7,
+       width = 5, height = 9,
        dpi = 300)
 ```
 

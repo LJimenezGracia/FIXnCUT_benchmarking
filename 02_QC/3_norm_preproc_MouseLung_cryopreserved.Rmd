@@ -156,7 +156,7 @@ UpSetR::upset(
   order.by = "freq",
   #group.by = "sets",
   mainbar.y.label = "# HVG", sets.x.label = "# HVG / Library",
-  point.size = 4, line.size = 1,
+  point.size = 4, line.size = 1, text.scale = 2,
   empty.intersections = "on",
   queries = list(
      list(query = UpSetR::intersects, params = list("Fixed", "Cryopreserved", "Fixed+Cryopreserved"), color = "green", active = T) )

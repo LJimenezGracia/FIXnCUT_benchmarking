@@ -76,7 +76,6 @@ DT::datatable(metadata, options = list(scrollX = TRUE))
 ```
 
 
-# Pseudo-bulk gene expression profiles & correlation
 
 ```{r}
 # Load Seurat object
@@ -102,6 +101,7 @@ sce <- SingleCellExperiment(assays = list(counts = counts),
                            colData = metadata)
 ```
 
+# Pseudo-bulk gene expression profiles & correlation
 
 ```{r}
 # Generate sample level metadata
@@ -552,7 +552,7 @@ for (cluster in levels(seurat_obj$celltypes)) {
     
     gg <- { PerformanceAnalytics::chart.Correlation(MM, histogram=TRUE,  method="pearson", pch=19) 
       recordPlot() }
-    list_gg_cells[[i]] <- gg
+    list_gg_cells_downs[[i]] <- gg
     i <- i+1
   }
 }
@@ -564,7 +564,6 @@ for (cluster in levels(seurat_obj$celltypes)) {
 ```{r}
 # Only fixed+cryo vs fixed!
 seurat_obj_sub <- seurat_obj[, seurat_obj$library_name %in% c("Fixed", "Fixed+Cryopreserved")]
-seurat_obj_sub$sample_protocol <- as.factor(as.character(seurat_obj_sub$sample_protocol))
 
 set.seed(0)
 list_gg_cells_downs <- list()
@@ -597,7 +596,8 @@ for (cluster in levels(seurat_obj$celltypes)) {
               conf.int = TRUE, # Add confidence interval
               cor.coef = TRUE, 
               cor.method = "pearson", # Add correlation coefficient.
-              xlab = "Fixed", ylab = "Fixed+Cryopreserved", 
+              xlab = "Log10(Mean Expression) in Fixed", ylab = "Log10(Mean Expression) in Fixed+Cryo", 
+              font.label = c(20, "plain"),
               title = cluster)
 
     list_gg_cells_downs[[i]] <- gg
@@ -606,11 +606,11 @@ for (cluster in levels(seurat_obj$celltypes)) {
 }
 ```
 
-```{r fig.width=15, fig.height=12}
-cowplot::plot_grid(plotlist = list_gg_cells_downs, ncol = 5)
+```{r fig.width=27, fig.height=7}
+cowplot::plot_grid(plotlist = list_gg_cells_downs, ncol = 9)
 
 ggsave(paste0(path_r_figs_out, "/MouseLung_cryo_Pseudobulk_FCFixedcells_downs.png"),
-       width = 15, height = 12,
+       width = 27, height = 7,
        dpi = 300)
 ```
 
@@ -652,7 +652,8 @@ for (cluster in levels(seurat_obj$celltypes)) {
               conf.int = TRUE, # Add confidence interval
               cor.coef = TRUE, 
               cor.method = "pearson", # Add correlation coefficient.
-              xlab = "Cryopreserved", ylab = "Fixed+Cryopreserved", 
+              xlab = "Log10(Mean Expression) in Cryo", ylab = "Log10(Mean Expression) in Fixed+Cryo", 
+              font.label = c(20, "plain"),
               title = cluster)
 
     list_gg_cells_downs[[i]] <- gg
@@ -661,11 +662,11 @@ for (cluster in levels(seurat_obj$celltypes)) {
 }
 ```
 
-```{r fig.width=15, fig.height=12}
-cowplot::plot_grid(plotlist = list_gg_cells_downs, ncol = 5)
+```{r fig.width=27, fig.height=7}
+cowplot::plot_grid(plotlist = list_gg_cells_downs, ncol = 9)
 
 ggsave(paste0(path_r_figs_out, "/MouseLung_cryo_Pseudobulk_FCCryocells_downs.png"),
-       width = 15, height = 12,
+       width = 27, height = 7,
        dpi = 300)
 ```
 

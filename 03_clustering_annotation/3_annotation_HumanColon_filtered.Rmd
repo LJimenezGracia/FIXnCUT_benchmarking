@@ -293,6 +293,27 @@ VlnPlot(
   ncol = 4)
 ```
 
+```{r fig.width=20, fig.height=10}
+macro_genes <- c("IL1B", "CXCL8", "CCL3", #both
+                   "STAB1", "FOLR2", #m2
+                   "S100A8", "CXCL10", "ACOD1", "CXCL5") 
+
+FeaturePlot(seurat_obj,
+            features = macro_genes,
+            #split.by = "therapy",
+            #order = T,
+            pt.size = 0.5,
+            ncol = 4
+)
+
+VlnPlot(
+  seurat_obj,
+  features = macro_genes,
+  cols = color_palette, 
+  pt.size = 0, 
+  ncol = 4)
+```
+
 ### B Lymphocytes
 ```{r fig.width=20, fig.height=10}
 Blymphocytes_genes <- c("MS4A1", "CD79A", "CD79B", "CD19", "CD27", "XBP1", "DERL3", "MZB1", "JCHAIN", "PRDM1", "IRF4", "SDC1")
@@ -397,16 +418,16 @@ seurat_obj <- RenameIdents(
  "5" = "B cells", # CD79A, MS4A1, HLA-DRA
  "6" = "Plasma cells", #
  "7" = "Colonocytes 1",  # FABP1, CA1
- "8" = "Mature Goblet", # ZG16, TFF3, MUC2
+ "8" = "Goblet cells", # ZG16, TFF3, MUC2
  "9" = "Colonocytes 1",
- "10" = "Transit-amplifying (TA) cells cycling", # CENPF, NUSAP1
+ "10" = "Transit-amplifying (TA) cells", # CENPF, NUSAP1
  "11" = "Stromal cells", # ADAMDEC, CCL11
  "12" = "Colonocytes 2",
  "13" = "Low quality cells",
  "14" = "Low quality cells",
- "15" = "Intestinal BEST4+OTOP2+ cells", #BEST4, OPOD2
+ "15" = "Colonocytes BEST4+OTOP2+", #BEST4, OPOD2
  "16" = "Tuft cells", # SH2D6, TRPM5
- "17" = "M1 macrophages", # LYZ, CCL3
+ "17" = "M2 macrophages", # STAB1, FOLR2 (IL1B, CXCL8, y CCL3 also en M1 macros, and missing S100A8, CXCL10, ACOD1, CXCL5 that are M1 exclusive)
  "18" = "NK cells", # KLRD1, NKG7
  "19" = "B cells cycling", # MKI67, TOP2A, STMN1
  "20" = "Low quality cells",

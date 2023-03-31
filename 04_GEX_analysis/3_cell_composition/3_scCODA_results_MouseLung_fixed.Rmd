@@ -101,7 +101,7 @@ gg_dotplot_effect_glob <- sccoda_effect_global_df %>%
           axis.title = element_blank(),
           axis.line  = element_blank(),
           axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
-          #legend.position = "bottom",
+          legend.position = "bottom",
           legend.text = element_text(size=10))
 
 gg_dotplot_effect_glob

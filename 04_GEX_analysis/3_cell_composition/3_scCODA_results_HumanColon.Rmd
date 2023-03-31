@@ -64,11 +64,17 @@ sccoda_effect_df_list <- purrr::map2(comparison_name_list,
 
 sccoda_effect_global_df <- do.call("rbind", sccoda_effect_df_list)
 
+sccoda_effect_global_df$Cell.Type[sccoda_effect_global_df$Cell.Type == "Intestinal BEST4+OTOP2+ cells"] <- "Colonocytes BEST4+OTOP2+"
+sccoda_effect_global_df$Cell.Type[sccoda_effect_global_df$Cell.Type == "M1 macrophages"] <- "M2 macrophages"
+sccoda_effect_global_df$Cell.Type[sccoda_effect_global_df$Cell.Type == "Mature Goblet"] <- "Goblet cells"
+sccoda_effect_global_df$Cell.Type[sccoda_effect_global_df$Cell.Type == "Transit-amplifying (TA) cells cycling"] <- "Transit-amplifying (TA) cells"
+
+
 # Lock plot order making a factor level order
-cells_order <- c("CD4+ T cells", "CD8+ T cells", "NK cells", "M0 macrophages", "M1 macrophages", 
+cells_order <- c("CD4+ T cells", "CD8+ T cells", "NK cells", "M0 macrophages", "M2 macrophages", 
                                                "B cells", "B cells cycling", "Plasma cells", "Plasmablasts", "Mast cells",
-                                                "Colonocytes 1", "Colonocytes 2", "Colonocytes PLCG2+", "Intestinal BEST4+OTOP2+ cells",
-                                               "Transit-amplifying (TA) cells cycling", "Mature Goblet", "Tuft cells", 
+                                                "Colonocytes 1", "Colonocytes 2", "Colonocytes PLCG2+", "Colonocytes BEST4+OTOP2+",
+                                               "Transit-amplifying (TA) cells", "Goblet cells", "Tuft cells", 
                                                "Endothelium", "Myofibroblasts", "Stromal cells", "Glia", "Cycling cells")
 sccoda_effect_global_df$Cell.Type <- factor(sccoda_effect_global_df$Cell.Type, 
                                                    levels = rev(cells_order))
@@ -78,7 +84,15 @@ sccoda_effect_global_df$comparison_label <- factor(sccoda_effect_global_df$compa
 
 
 # Dotplot immune
-```{r fig.height=5, fig.width=8}
+```{r}
+sccoda_effect_global_df$comparison_label <- as.character(sccoda_effect_global_df$comparison_label)
+sccoda_effect_global_df$comparison_label[sccoda_effect_global_df$comparison_label == "Fixed vs Fresh"] <- "Fixed\nvs Fresh"
+sccoda_effect_global_df$comparison_label[sccoda_effect_global_df$comparison_label == "Fixed vs Cryo"] <- "Fixed\nvs Cryo"
+sccoda_effect_global_df$comparison_label[sccoda_effect_global_df$comparison_label == "Fixed+Cryo vs Cryo"] <- "Fixed+Cryo\nvs Cryo"
+sccoda_effect_global_df$comparison_label[sccoda_effect_global_df$comparison_label == "Fixed+Cryo vs Fixed"] <- "Fixed+Cryo\nvs Fixed"
+```
+
+```{r fig.height=5, fig.width=7}
 gg_dotplot_effect_glob <- sccoda_effect_global_df %>%
   filter(comparison_fraction == "HumanColon") %>% 
     ggplot(aes(
@@ -96,7 +110,7 @@ gg_dotplot_effect_glob <- sccoda_effect_global_df %>%
           axis.title = element_blank(),
           axis.line  = element_blank(),
           axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
-          #legend.position = "bottom",
+          legend.position = "bottom",
           legend.text = element_text(size=10))
 
 gg_dotplot_effect_glob

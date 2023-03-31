@@ -96,30 +96,6 @@ ggsave(filename = fig_path,
        plot = gg_dotplot_effect_glob)
 ```
 
-# Dotplot by comparison
-The data used in this Rmarkdown document comes from **JULIA_09** dataset.
-```{r fig.height=8, fig.width=7}
-purrr::map2(comparison_name_list, comparison_info_list, function(comparison, label){
-  gg_dotplot_effect <- sccoda_effect_global_df %>%
-    filter(comparison_name == comparison) %>%
-    ggplot(aes(
-      x = comparison_label, 
-      y = Cell.Type,
-      color = log2.fold.change, 
-      size = credible_effects)) + 
-    geom_point() + 
-    scale_color_gradient2(low="#4575b4", mid="#ffffbf", high="#d73027", limits = c(-1,1)) +
-    cowplot::theme_cowplot() + 
-    labs(title = comparison,
-         y = "Cell types",
-         x = "",
-         color = "Log2FC",
-         size = "Credible effects") + 
-    theme(axis.ticks = element_blank(),
-          axis.line  = element_blank(),
-          axis.text.x = element_text(angle = 0, vjust = 0.5, hjust=0.5))
-})
-```
 
 # Session Info
 ```{r}

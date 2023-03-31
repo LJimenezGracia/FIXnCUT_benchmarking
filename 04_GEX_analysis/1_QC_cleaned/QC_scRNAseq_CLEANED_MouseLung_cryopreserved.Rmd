@@ -46,8 +46,8 @@ metadata_variables_confounder <- c("nCount_RNA", "nFeature_RNA", "gem_id",
                                    "library_name", "sample_protocol", "fixation_time")
 
 palette_color_factor <- c("Fixed" = "#FC8D62", 
-                          "Cryopreserved" ="#8DA0CB",
-                          "Fixed+Cryopreserved" = "#E78AC3")
+                          "Cryo" ="#8DA0CB",
+                          "Fixed+Cryo" = "#E78AC3")
 
 palette_color_cells <- c("Arterial cells" = "#184E77",
                          "Bipotent Capillary cells" = "#1E6091",
@@ -93,8 +93,8 @@ metadata <- metadata %>%
 
 # Modify metadata
 metadata$library_name[metadata$library_name == "Lung_fixed_24h"] <- "Fixed"
-metadata$library_name[metadata$library_name == "Lung_cryo"] <- "Cryopreserved"
-metadata$library_name[metadata$library_name == "Lung_cryopreserved_cryo"] <- "Fixed+Cryopreserved"
+metadata$library_name[metadata$library_name == "Lung_cryo"] <- "Cryo"
+metadata$library_name[metadata$library_name == "Lung_cryopreserved_cryo"] <- "Fixed+Cryo"
 
 metadata$sample_protocol <- metadata$library_name
 print("Libraries/Samples metadata")
@@ -106,6 +106,13 @@ DT::datatable(metadata, options = list(scrollX = TRUE))
 # Load Seurat object
 seurat_obj <- readRDS(here::here("03_clustering_annotation/results/R_objects/FIXnCUT_MouseLung_cryopreserved_clustering_annotation_cleaned.rds"))
 seurat_obj
+
+seurat_obj$library_name <- as.character(seurat_obj$library_name)
+seurat_obj$library_name[seurat_obj$library_name == "Cryopreserved"] <- "Cryo"
+seurat_obj$library_name[seurat_obj$library_name == "Fixed+Cryopreserved"] <- "Fixed+Cryo"
+
+seurat_obj$library_name <- factor(x = seurat_obj$library_name, 
+                                  levels = c("Fixed", "Cryo", "Fixed+Cryo"))
 
 seurat_obj$celltypes <- factor(x = seurat_obj$celltypes,
                                     levels = c("T cells", "NK cells", "Monocytes", "Macrophages Apoe+", 
@@ -128,6 +135,9 @@ seurat_obj_c$celltypes <- factor(x = seurat_obj_c$celltypes,
                                                "Arterial cells", "Vein cells",  "Capillary aerocyte (aCap) cells",
                                                "Capillary general (gCap) cells", "Bipotent Capillary cells", "Pneumocytes Type I", "Pneumocytes Type II",
                                                "Club cells", "Cycling cells"))
+
+
+
 ```
 
 
@@ -170,7 +180,7 @@ ggsave(paste0(path_r_figs_out, "/MouseLung_cryo_UMAP.svg"),
 DimPlot(
   seurat_obj,
   reduction = "umap",
-  group.by = "sample_protocol",
+  group.by = "library_name",
   split.by = "library_name") +
   scale_color_manual(values = palette_color_factor) &
   labs(title = "", color = "") + NoLegend()
@@ -181,10 +191,10 @@ ggsave(paste0(path_r_figs_out, "/MouseLung_cryo_UMAPsplit.svg"),
 ```
 
 # QC metrics
-```{r fig.height=6, fig.width=20}
+```{r fig.height=4, fig.width=10}
 VlnPlot(seurat_obj,
         features = c("nCount_RNA", "nFeature_RNA", "pct_mt"),
-        split.by = "sample_protocol",
+        split.by = "library_name",
         group.by = "library_name",
         pt.size = 0,
         log = TRUE,
@@ -200,14 +210,14 @@ VlnPlot(seurat_obj,
   #                               label = "p.format", label.y.npc = 0.95)
 
 ggsave(paste0(path_r_figs_out, "/MouseLung_cryo_QCmetrics.svg"),
-       width = 15, height = 6,
+       width = 10, height = 4,
        dpi = 300)
 ```
 
-```{r fig.height=6, fig.width=15}
+```{r fig.height=4, fig.width=10}
 VlnPlot(seurat_obj_c,
         features = c("nCount_RNA", "nFeature_RNA", "pct_mt"),
-        split.by = "sample_protocol",
+        split.by = "library_name",
         group.by = "library_name",
         pt.size = 0,
         log = TRUE,
@@ -223,7 +233,7 @@ VlnPlot(seurat_obj_c,
   #                               label = "p.format", label.y.npc = 0.95)
 
 ggsave(paste0(path_r_figs_out, "/MouseLung_cryo_QCmetrics-NoNeu.svg"),
-       width = 15, height = 6,
+       width = 10, height = 4,
        dpi = 300)
 ```
 
@@ -234,9 +244,9 @@ seurat_metadata <-  seurat_obj@meta.data %>%
 ```
 
 
-```{r fig.height=10, fig.width=20}
+```{r fig.height=7, fig.width=15}
 ggplot(seurat_metadata, 
-       aes(x = celltypes, y = qc_metric_value, fill = sample_protocol)) +
+       aes(x = celltypes, y = qc_metric_value, fill = library_name)) +
   geom_boxplot() +
   theme_classic() +
     #ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
@@ -246,18 +256,18 @@ ggplot(seurat_metadata,
   labs(x = "Cell-types", y="") +
   facet_wrap(~qc_metric, scales = "free_y", nrow = 3) + 
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-        axis.text = element_text(size=18),
+        axis.text = element_text(size=15),
         axis.title = element_blank(),
-        strip.text = element_text(size=20),
+        strip.text = element_text(size=15),
           legend.position = "right",
-          legend.text = element_text(size = 20),
+          legend.text = element_text(size = 18),
           legend.title=element_blank()) +
     guides(fill = guide_legend(override.aes = list(color = NA), reverse = TRUE), 
            color = FALSE
            )
 
 ggsave(paste0(path_r_figs_out, "/MouseLung_cryo_QCmetricsCell.svg"),
-       width = 20, height = 10,
+       width = 15, height = 7,
        dpi = 300)
 ```
 
@@ -300,7 +310,23 @@ ggsave(paste0(path_r_figs_out, "/MouseLung_cryo_UMAPcelltypes-NoNeu.svg"),
 
 
 # Celltypes Proportions
-```{r fig.width=10, fig.height=6}
+```{r fig.width=12, fig.height=6}
+dittoSeq::dittoBarPlot(seurat_obj, 
+                             "celltypes",
+                             group.by = "library_name",
+                             scale = "percent",
+                            retain.factor.levels = TRUE,
+                       legend.show  = FALSE,
+                             color.panel = palette_color_cells) +
+  coord_flip() + 
+  labs(title = "") +
+  theme(axis.text.y = element_text(size=20, hjust = 0.5, angle = 90),
+        axis.text.x = element_text(angle = 0, hjust = 0.5, size=14),
+        axis.title.x = element_text(size=20),
+        axis.title.y = element_blank())
+```
+
+```{r fig.width=12, fig.height=6}
 dittoSeq::dittoBarPlot(seurat_obj_c, 
                              "celltypes",
                              group.by = "library_name",
@@ -310,18 +336,18 @@ dittoSeq::dittoBarPlot(seurat_obj_c,
                              color.panel = palette_color_cells) +
   coord_flip() + 
   labs(title = "") +
-  theme(axis.text.y = element_text(size=20),
+  theme(axis.text.y = element_text(size=20, hjust = 0.5, angle = 90),
         axis.text.x = element_text(angle = 0, hjust = 0.5, size=14),
         axis.title.x = element_text(size=20),
         axis.title.y = element_blank())
 
 ggsave(paste0(path_r_figs_out, "/MouseLung_cryo_CellProp-NoNeu.svg"),
-       width = 10, height = 5,
+       width = 12, height = 6,
        dpi = 300)
 ```
 
-
-```{r fig.width=14, fig.height=7}
+# Dotplot gene markers
+```{r fig.width=14, fig.height=5}
 genes_of_interest <- c("Cd3e",	"Cd4", "Cd8b1", # Tcells# CD8+
                        "Gzmb",	"Klrd1", # NK cells
                        "Plac8",	"Ccr2", # Monocytes
@@ -355,10 +381,10 @@ DotPlot(seurat_obj,
         dot.scale = 8) +
   theme(axis.text.x = element_text(angle=90, hjust = 1, vjust = 0.5),
         axis.title = element_blank(),
-        legend.position = "bottom")
+        legend.position = "right")
 
 ggsave(paste0(path_r_figs_out, "/MouseLung_cryo_DotplotMarkers.svg"),
-       width = 14, height = 7,
+       width = 14, height = 5,
        dpi = 300)
 ```
 
