@@ -23,7 +23,7 @@ The repository is organized into the following folder tree, which contains all t
 
 ## Data accessibility
 
-* The complete raw data (FASTQ files) generated in this study have been submitted to the NCBI Gene Expression Omnibus (GEO) under accession number XXXXX.
+* The complete raw data (FASTQ files) generated in this study have been submitted to the NCBI Gene Expression Omnibus (GEO) under accession number [GSE229944](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE229944).
 * The count matrices and metadata are deposited at [Zenodo](https://zenodo.org/record/7837624#.ZD5RuI5BxH4). 
 
 
