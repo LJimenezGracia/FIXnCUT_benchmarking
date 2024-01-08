@@ -64,12 +64,12 @@ sccoda_effect_df_list <- purrr::map2(comparison_name_list,
 sccoda_effect_global_df <- do.call("rbind", sccoda_effect_df_list)
 
 # Lock plot order making a factor level order
-cells_order <- c("T cells", "NK cells", "Monocytes", "Macrophages Apoe+", 
-                                               "Alveolar Macrophages", "Monocyte-derived DCs", "B cells",
-                                                "Fibroblasts", "Pericytes", "Lymphatic Endothelial cells",
+cells_order <- c("B cells", "T cells", "NK cells", "Monocytes",
+                                               "Alveolar Macrophages", "Intersticial Macrophages", "Monocyte-derived DCs", 
+                                               "Stromal cells", "Endothelial cells", "Lymphatic Endothelial cells",
                                                "Arterial cells", "Vein cells",  "Capillary aerocyte (aCap) cells",
                                                "Capillary general (gCap) cells", "Bipotent Capillary cells", "Pneumocytes Type I", "Pneumocytes Type II",
-                                               "Club cells", "Cycling cells")
+                                               "Club cells", "Neutrophils","Cycling cells")
 sccoda_effect_global_df$Cell.Type <- factor(sccoda_effect_global_df$Cell.Type, 
                                                    levels = rev(cells_order))
 ```
@@ -83,7 +83,7 @@ sccoda_effect_global_df$comparison_label[sccoda_effect_global_df$comparison_labe
 ```
 
 
-```{r fig.height=5, fig.width=7}
+```{r fig.height=5, fig.width=8}
 gg_dotplot_effect_glob <- sccoda_effect_global_df %>%
   filter(comparison_fraction == "MouseLung") %>% 
     ggplot(aes(

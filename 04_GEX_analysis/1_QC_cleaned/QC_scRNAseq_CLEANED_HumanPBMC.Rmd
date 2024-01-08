@@ -100,12 +100,12 @@ seurat_obj <- readRDS(here::here("03_clustering_annotation/results/R_objects/FIX
 seurat_obj
 
 seurat_obj$celltypes <- factor(x = seurat_obj$celltypes,
-                                    levels = c("Naive CD4+ T cells", "Transitional Memory CD4+ T cells",
+                                    levels = c("Naive B cells", "Memory B cells",
+                                               "Naive CD4+ T cells", "Transitional Memory CD4+ T cells",
                          "Central Memory CD4+ T cells", "Effector Memory CD4+ T cells", "Tregs", 
                          "Naive CD8+ T cells", "Cytotoxic CD8+ T cells", "gdT cells", "MAIT", "NK cells",
                          "Classical Monocytes", "Intermediate Monocytes", "Non-classical Monocytes",
                          "DC1/DC2","pDCs",
-                         "Naive B cells", "Memory B cells",
                          "Progenitor cells","Cycling cells"))
 
 seurat_obj$condition <- factor(x = seurat_obj$condition,
@@ -262,7 +262,10 @@ ggsave(paste0(path_r_figs_out, "/HumanPBMC_CellProp.svg"),
 
 # Dotplot gene markers
 ```{r fig.width=15, fig.height=6}
-genes_of_interest <- c("CD3E",	"CD4", # Tcells
+genes_of_interest <- c( "CD79A",	"CD19",	"MS4A1", # B cells
+                       "IGHD",	"IGHM",	"CCR7", # Naive
+                        # Memory
+                       "CD3E",	"CD4", # Tcells
                        "CCR7",	"LEF1",	"TCF7", # Naive CD4+ T cells
                        "CRIP1", "ITGB1", "CCR10", # Transitional CD4+ T cells
                        "IL7R",	"PASK", #	Central Memory CD4+ T cells	 
@@ -279,9 +282,6 @@ genes_of_interest <- c("CD3E",	"CD4", # Tcells
                        "MS4A7",	"LST1", # Non-classical
                        "CLEC9A", "HLA-DPA1", "CD1C",	"CLEC10A", # DC1/DC2
                        "JCHAIN",	"IL3RA",	"IRF8", # pDCs
-                       "CD79A",	"CD19",	"MS4A1", # B cells
-                       "IGHD",	"IGHM",	"CCR7", # Naive
-                        # Memory
                        "CD34", "SOX4", # Progenitors
                        "STMN1",	"TOP2A", "MKI67" # Cycling
                        )

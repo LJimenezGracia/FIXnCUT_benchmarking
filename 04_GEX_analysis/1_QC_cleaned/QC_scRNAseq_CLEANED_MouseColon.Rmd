@@ -89,7 +89,7 @@ seurat_obj <- readRDS(here::here("03_clustering_annotation/results/R_objects/FIX
 seurat_obj
 
 seurat_obj$celltypes <- factor(x = seurat_obj$celltypes,
-                                    levels = c("T-NK cells", "Myeloid cells", "Immature B cells", "Mature B cells",
+                                    levels = c("Immature B cells", "Mature B cells", "T-NK cells", "Myeloid cells", 
                                                "Distal Colonocytes", "Distal Colonocytes Emp1+", "Proximal Colonocytes",
                                                "Transit-amplifying (TA) cells", "Goblet cells", "Paneth cells", "Tuft cells",
                                                "Enteroendocrine (EEC) cells", "Endothelium", "Lymphatic Endothelial cells",
@@ -291,10 +291,10 @@ ggsave(paste0(path_r_figs_out, "/MouseColon_CellProp.svg"),
 
 # Dotplot gene markers
 ```{r fig.width=5, fig.height=9}
-genes_of_interest <- c("Cd3e", "Cd3d", "Klrd1", # T-NK cells, 
-                       "Cd14", "Apoe", "C1qa", # Myeloid cells
-                       "Ebf1", "Cd79a", "Ms4a1", "H2-Eb1", # Immature B cells 
+genes_of_interest <- c("Ebf1", "Cd79a", "Ms4a1", "H2-Eb1", # Immature B cells 
                        # Mature B cells",
+                       "Cd3e", "Cd3d", "Klrd1", # T-NK cells, 
+                       "Cd14", "Apoe", "C1qa", # Myeloid cells
                        "Mep1a", "Emp1", "Guca2a", "Aqp8", # Distal Colonocytes"
                        "Cbr1", # Proximal Colonocytes
                        "Tubb5", "Stmn1", "Cenpf", # Transit-amplifying (TA) cells

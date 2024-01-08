@@ -51,7 +51,7 @@ The data used in this Rmarkdown document comes from **SCBATLLE_37** dataset.
 sccoda_effect_df_list <- purrr::map2(comparison_name_list, 
                                      comparison_info_list, 
                                      function(comparison_name, comparison_info){
-  file_path <- paste0(path_r_tables, "/MouseLung_fixed_scCODA_", comparison_name, "_effect.tsv")
+  file_path <- paste0(path_r_tables, "/MouseLung_fixed_perfused_scCODA_", comparison_name, "_effect.tsv")
   df <- read.csv(file = file_path, 
                  sep = "\t")
   df["comparison_name"] <- comparison_name
@@ -64,12 +64,12 @@ sccoda_effect_df_list <- purrr::map2(comparison_name_list,
 sccoda_effect_global_df <- do.call("rbind", sccoda_effect_df_list)
 
 # Lock plot order making a factor level order
-cells_order <- c("T cells", "NK cells", "Monocytes", "Macrophages Apoe+", 
-                                               "Alveolar Macrophages", "Monocyte-derived DCs", "B cells",
-                                                "Fibroblasts", "Pericytes", "Lymphatic Endothelial cells",
+cells_order <-  c("B cells", "T cells", "NK cells", "Monocytes",
+                                               "Alveolar Macrophages", "Intersticial Macrophages", "Monocyte-derived DCs", 
+                                               "Stromal cells", "Endothelial cells", "Lymphatic Endothelial cells",
                                                "Arterial cells", "Vein cells",  "Capillary aerocyte (aCap) cells",
                                                "Capillary general (gCap) cells", "Bipotent Capillary cells", "Pneumocytes Type I", "Pneumocytes Type II",
-                                               "Club cells", "Cycling cells")
+                                               "Club cells", "Neutrophils","Cycling cells")
 sccoda_effect_global_df$Cell.Type <- factor(sccoda_effect_global_df$Cell.Type, 
                                                    levels = rev(cells_order))
 ```
@@ -77,12 +77,12 @@ sccoda_effect_global_df$Cell.Type <- factor(sccoda_effect_global_df$Cell.Type,
 
 # Dotplot immune
 ```{r fig.height=6, fig.width=7}
-cells_order <- c("T cells", "NK cells", "Monocytes", "Macrophages Apoe+", 
-                                               "Alveolar Macrophages", "Monocyte-derived DCs", "B cells",
-                                                "Fibroblasts", "Pericytes", "Lymphatic Endothelial cells",
+cells_order <-  c("B cells", "T cells", "NK cells", "Monocytes",
+                                               "Alveolar Macrophages", "Intersticial Macrophages", "Monocyte-derived DCs", 
+                                               "Stromal cells", "Endothelial cells", "Lymphatic Endothelial cells",
                                                "Arterial cells", "Vein cells",  "Capillary aerocyte (aCap) cells",
                                                "Capillary general (gCap) cells", "Bipotent Capillary cells", "Pneumocytes Type I", "Pneumocytes Type II",
-                                               "Club cells", "Cycling cells")
+                                               "Club cells", "Neutrophils","Cycling cells")
 
 gg_dotplot_effect_glob <- sccoda_effect_global_df %>%
   filter(comparison_fraction == "MouseLung") %>% 
@@ -94,7 +94,7 @@ gg_dotplot_effect_glob <- sccoda_effect_global_df %>%
     geom_point() + 
     scale_color_gradient2(low="#4575b4", mid="#ffffbf", high="#d73027") + #, limits = c(-1,1)) +
     cowplot::theme_cowplot() + 
-    labs(title = "scCODA: MouseLung_fixed",
+    labs(title = "scCODA: MouseLung_fixed_perfused",
          color = "Log2FC",
          size = "Credible effects") + 
     theme(axis.ticks = element_blank(),
@@ -106,7 +106,7 @@ gg_dotplot_effect_glob <- sccoda_effect_global_df %>%
 
 gg_dotplot_effect_glob
 
-fig_path <- paste0(path_r_figs, "/MouseLung_fixed_scCODA_dotplot_Fixed-Fresh_celltype.png")
+fig_path <- paste0(path_r_figs, "/MouseLung_fixed_perfused_scCODA_dotplot_Fixed-Fresh_celltype.png")
 ggsave(filename = fig_path, 
        plot = gg_dotplot_effect_glob)
 ```

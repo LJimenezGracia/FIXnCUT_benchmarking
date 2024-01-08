@@ -28,7 +28,7 @@ group_1_list <- c("Fixed")
 group_2_list <- c("Fresh")
 
 ## Load data
-seurat_obj <- readRDS(paste0(path_r_objects_in, "/FIXnCUT_MouseLung_fixed_clustering_annotation_cleaned-NoNeutrophils.rds"))
+seurat_obj <- readRDS(paste0(path_r_objects_in, "/FIXnCUT_MouseLung_fixed_perfused_clustering_annotation_cleaned.rds"))
 
 for (index in 1:length(comparison_name_list)) {
   comparison_name <- comparison_name_list[[index]]
@@ -36,9 +36,9 @@ for (index in 1:length(comparison_name_list)) {
   group_2 <- group_2_list[[index]]
   
   # Define comparison paths
-  path_object <- paste0(path_r_objects_out, "/FIXnCUT_MouseLung_fixed_DEgenes_cells_", comparison_name, ".rds")
-  path_file <- paste0(path_r_tables, "/FIXnCUT_MouseLung_fixed_DEgenes_cells_", comparison_name, ".csv")
-  path_file_split <- paste0(path_r_tables, "/FIXnCUT_MouseLung_fixed_DEgenes_cells_", comparison_name, "_UPDOWN.xlsx")
+  path_object <- paste0(path_r_objects_out, "/FIXnCUT_MouseLung_fixed_perfused_DEgenes_cells_", comparison_name, ".rds")
+  path_file <- paste0(path_r_tables, "/FIXnCUT_MouseLung_fixed_perfused_DEgenes_cells_", comparison_name, ".csv")
+  path_file_split <- paste0(path_r_tables, "/FIXnCUT_MouseLung_fixed_perfused_DEgenes_cells_", comparison_name, "_UPDOWN.xlsx")
   
   # DE analysis considering cell-types separately
   ## Subset data
@@ -55,8 +55,8 @@ for (index in 1:length(comparison_name_list)) {
       ident_1 = group_1,
       ident_2 = group_2,
       test_de = "MAST",
-      threshold_pvaladj = 0.05,
-      latent_vars = "replicate"
+      threshold_pvaladj = 0.05#,
+      #latent_vars = "replicate"
     )
     
     })

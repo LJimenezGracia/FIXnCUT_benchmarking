@@ -76,12 +76,11 @@ DT::datatable(metadata, options = list(scrollX = TRUE))
 seurat_obj <- readRDS(str_c(path_r_objects, "/FIXnCUT_HumanPBMC_clustering_annotation_cleaned.rds"))
 
 seurat_obj$celltypes <- factor(x = seurat_obj$celltypes,
-                                    levels = c("Naive CD4+ T cells", "Transitional Memory CD4+ T cells",
+                                    levels = c("Naive B cells", "Memory B cells","Naive CD4+ T cells", "Transitional Memory CD4+ T cells",
                          "Central Memory CD4+ T cells", "Effector Memory CD4+ T cells", "Tregs", 
                          "Naive CD8+ T cells", "Cytotoxic CD8+ T cells", "gdT cells", "MAIT", "NK cells",
                          "Classical Monocytes", "Intermediate Monocytes", "Non-classical Monocytes",
                          "DC1/DC2","pDCs",
-                         "Naive B cells", "Memory B cells",
                          "Progenitor cells","Cycling cells"))
 ```
 

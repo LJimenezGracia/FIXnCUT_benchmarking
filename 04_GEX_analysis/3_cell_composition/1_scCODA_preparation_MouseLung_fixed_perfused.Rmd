@@ -49,7 +49,7 @@ names(color_palette) <- NULL
 The data used in this Rmarkdown document comes from **FIX** dataset.
 ```{r}
 # using cleaned data
-seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_clustering_annotation_cleaned-NoNeutrophils.rds"))
+seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_perfused_clustering_annotation_cleaned.rds"))
 seurat_obj_metadata <- seurat_obj@meta.data
 rm(seurat_obj)
 head(seurat_obj_metadata)
@@ -66,19 +66,19 @@ celltype_prop_df <- seurat_obj_metadata %>%
   mutate_if(is.numeric, ~replace(., is.na(.), 0)) # replacing NA by 0
 head(celltype_prop_df)
 
-celltype_prop_df_metadata <- seurat_obj_metadata %>% 
-   select(c("library_name", "sample_protocol", "replicate")) %>% 
-   unique()
-head(celltype_prop_df_metadata)
- 
-celltype_counts <- merge(celltype_prop_df, 
-                          celltype_prop_df_metadata, 
-                          by="library_name")
-head(celltype_counts)
+# celltype_prop_df_metadata <- seurat_obj_metadata %>% 
+#    select(c("sample_protocol")) %>% 
+#    unique()
+# head(celltype_prop_df_metadata)
+#  
+# celltype_counts <- merge(celltype_prop_df, 
+#                           celltype_prop_df_metadata, 
+#                           by="library_name")
+# head(celltype_counts)
 
 # Exporting cell_counts by cell types
-openxlsx::write.xlsx(celltype_counts,
-                     file = paste0(path_r_tables_out, "/FIXnCUT_MouseLung_fixed_clustering_annotation_cleaned_counts.xlsx"))
+openxlsx::write.xlsx(celltype_prop_df,
+                     file = paste0(path_r_tables_out, "/FIXnCUT_MouseLung_fixed_perfused_clustering_annotation_cleaned_counts.xlsx"))
 ```
 
 # Session Info

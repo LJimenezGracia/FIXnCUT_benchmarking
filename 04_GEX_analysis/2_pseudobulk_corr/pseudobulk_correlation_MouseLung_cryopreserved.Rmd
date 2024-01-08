@@ -79,15 +79,14 @@ DT::datatable(metadata, options = list(scrollX = TRUE))
 
 ```{r}
 # Load Seurat object
-seurat_obj <- readRDS(str_c(path_r_objects, "/FIXnCUT_MouseLung_cryopreserved_clustering_annotation_cleaned-NoNeutrophils.rds"))
+seurat_obj <- readRDS(str_c(path_r_objects, "/FIXnCUT_MouseLung_cryopreserved_clustering_annotation_cleaned.rds"))
 seurat_obj$celltypes <- factor(x = seurat_obj$celltypes,
-                                    levels = c("T cells", "NK cells", "Monocytes", "Macrophages Apoe+", 
-                                               "Alveolar Macrophages", "Monocyte-derived DCs", "B cells",
-                                                "Fibroblasts", "Pericytes", "Lymphatic Endothelial cells",
+                                    levels = c("B cells", "T cells", "NK cells", "Monocytes",
+                                               "Alveolar Macrophages", "Intersticial Macrophages", "Monocyte-derived DCs", 
+                                               "Stromal cells", "Endothelial cells", "Lymphatic Endothelial cells",
                                                "Arterial cells", "Vein cells",  "Capillary aerocyte (aCap) cells",
-                                               "Capillary general (gCap) cells", "Bipotent Capillary cells", 
-                                               "Pneumocytes Type I", "Pneumocytes Type II",
-                                               "Club cells", "Cycling cells"))
+                                               "Capillary general (gCap) cells", "Bipotent Capillary cells", "Pneumocytes Type I", "Pneumocytes Type II",
+                                               "Club cells", "Neutrophils","Cycling cells"))
 ```
 
 

@@ -43,12 +43,8 @@ path_r_figs_out <- here::here("04_GEX_analysis/results/figs")
 source(here::here("bin/utils.R"))
 
 # Color palette
-palette_color_factor <- c("Fresh" = "#66C2A5", 
-                          "Fixed" ="#FC8D62")
-palette_color_library <- c("Fixed_1" = "#D53E4F",
-                           "Fixed_2" = "#FDAE61",
-                           "Fresh_1" = "#ABDDA4",
-                           "Fresh_2" = "#3288BD")
+palette_color_factor <- c("Cryo" ="#8DA0CB",
+                          "Fixed+Cryo" = "#E78AC3")
 
 set.seed(12)
 ```
@@ -56,30 +52,28 @@ set.seed(12)
 ## Load data
 ```{r}
 # Load Seurat object
-seurat_obj <- readRDS(str_c(path_r_objects, "/FIXnCUT_MouseLung_fixed_clustering_annotation_cleaned-NoNeutrophils.rds"))
-seurat_obj$sample_protocol <- factor(x = seurat_obj$sample_protocol,
-                                    levels = c("Fresh", "Fixed"))
+seurat_obj <- readRDS(str_c(path_r_objects, "/FIXnCUT_MouseLung_cryopreserved_clustering_annotation_cleaned.rds"))
+
+
+# Remove FIXED condition!
+seurat_obj <- subset(seurat_obj, subset = library_name != "Fixed")
+
+
+seurat_obj$library_name <- as.character(seurat_obj$library_name)
+seurat_obj$library_name[seurat_obj$library_name == "Cryopreserved"] <- "Cryo"
+seurat_obj$library_name[seurat_obj$library_name == "Fixed+Cryopreserved"] <- "Fixed+Cryo"
+
+seurat_obj$library_name <- factor(x = seurat_obj$library_name, 
+                                  levels = c("Cryo", "Fixed+Cryo"))
+
+
 seurat_obj$celltypes <- factor(x = seurat_obj$celltypes,
-                                    levels = c("T cells", "NK cells", "Monocytes", "Macrophages Apoe+", 
-                                               "Alveolar Macrophages", "Monocyte-derived DCs", "B cells",
-                                                "Fibroblasts", "Pericytes", "Lymphatic Endothelial cells",
+                                    levels = c("B cells", "T cells", "NK cells", "Monocytes",
+                                               "Alveolar Macrophages", "Intersticial Macrophages", "Monocyte-derived DCs", 
+                                               "Stromal cells", "Endothelial cells", "Lymphatic Endothelial cells",
                                                "Arterial cells", "Vein cells",  "Capillary aerocyte (aCap) cells",
                                                "Capillary general (gCap) cells", "Bipotent Capillary cells", "Pneumocytes Type I", "Pneumocytes Type II",
-                                               "Club cells", "Cycling cells"))
-seurat_obj
-table(seurat_obj$library_name)
-table(seurat_obj$library_name, seurat_obj$celltypes)
-
-# Downsampling sample
-df <- data.frame(condition=seurat_obj$library_name, cell_type=seurat_obj$celltypes)
-df$barcode <- rownames(df)
-df_new <- df %>% 
-  group_by(condition, cell_type) %>%
-  slice_sample(n=250, replace = F) #  sample w/i each condition/celltype
-table(df_new$condition, df_new$cell_type)
-cells_to_keep <- df_new$barcode
-
-seurat_obj <- subset(seurat_obj, cells = cells_to_keep)
+                                               "Club cells", "Neutrophils","Cycling cells"))
 seurat_obj
 table(seurat_obj$library_name)
 table(seurat_obj$library_name, seurat_obj$celltypes)
@@ -97,8 +91,7 @@ housekeeping_genes <- c("Actb", "4933434E20Rik", "Chmp2a", "Emc7", "Gpi1", "Psmb
 VlnPlot(
   seurat_obj,
   features = housekeeping_genes,
-  group.by = "replicate",
-  split.by = "sample_protocol",
+  group.by = "library_name",
   cols = palette_color_factor, 
   pt.size = 0, 
   ncol = 6) &
@@ -117,7 +110,7 @@ VlnPlot(
   seurat_obj,
   features = housekeeping_genes,
   group.by = "celltypes",
-  split.by = "sample_protocol",
+  split.by = "library_name",
   cols = palette_color_factor, 
   pt.size = 0, 
   ncol = 4) &
@@ -136,8 +129,7 @@ lowquality_genes <- c("Hbb-b1", "Hbb-b2", "Hbb-bs", "Hbb-bt", "Hba-a1", "Hba-a2"
 VlnPlot(
   seurat_obj,
   features = lowquality_genes,
-  group.by = "replicate",
-  split.by = "sample_protocol",
+  group.by = "library_name",
   cols = palette_color_factor, 
   pt.size = 0, 
   ncol = 4) &
@@ -148,7 +140,6 @@ VlnPlot(
         axis.text = element_text(size=18),
         axis.title.x = element_blank(),
         strip.text = element_text(size=20))  &
-  aes(alpha=seurat_obj$replicate) &
   scale_alpha_discrete(range = c(0.5, 1))
 ```
 
@@ -157,7 +148,7 @@ VlnPlot(
   seurat_obj,
   features = lowquality_genes,
   group.by = "celltypes",
-  split.by = "sample_protocol",
+  split.by = "library_name",
   cols = palette_color_factor, 
   pt.size = 0.01, 
   ncol = 4) &
@@ -175,8 +166,7 @@ HSP_genes <- c("Hsp90aa1", "Hsp90ab1", "Hspa1a", "Hspa1b", "Hspa5", "Hspa6", "Hs
 VlnPlot(
   seurat_obj,
   features = HSP_genes,
-  group.by = "replicate",
-  split.by = "sample_protocol",
+  group.by = "library_name",
   cols = palette_color_factor, 
   pt.size = 0, 
   ncol = 6) &
@@ -187,7 +177,6 @@ VlnPlot(
         axis.text = element_text(size=18),
         axis.title.x = element_blank(),
         strip.text = element_text(size=20)) &
-  aes(alpha=seurat_obj$replicate) &
   scale_alpha_discrete(range = c(0.5, 1))
 ```
 
@@ -197,7 +186,7 @@ VlnPlot(
   seurat_obj,
   features = HSP_genes,
   group.by = "celltypes",
-  split.by = "sample_protocol",
+  split.by = "library_name",
   cols = palette_color_factor, 
   pt.size = 0, 
   ncol = 4) &
@@ -217,8 +206,7 @@ hypoxiaadaptation_genes <- c("Ddit3", "Xbp1", "Ddit4", "P4hb", # ER stress (Rash
 VlnPlot(
   seurat_obj,
   features = hypoxiaadaptation_genes,
-  group.by = "replicate",
-  split.by = "sample_protocol",
+  group.by = "library_name",
   cols = palette_color_factor, 
   pt.size = 0, 
   ncol = 5) &
@@ -229,7 +217,6 @@ VlnPlot(
         axis.text = element_text(size=18),
         axis.title.x = element_blank(),
         strip.text = element_text(size=20))  &
-  aes(alpha=seurat_obj$replicate) &
   scale_alpha_discrete(range = c(0.5, 1))
 ```
 
@@ -238,7 +225,7 @@ VlnPlot(
   seurat_obj,
   features = hypoxiaadaptation_genes,
   group.by = "celltypes",
-  split.by = "sample_protocol",
+  split.by = "library_name",
   cols = palette_color_factor, 
   pt.size = 0, 
   ncol = 3) &
@@ -270,7 +257,7 @@ print(vandenBrinketal_up_genes_list)
 DotPlot(seurat_obj,
         features = vandenBrinketal_up_genes_list,
         group.by = "celltypes",
-        split.by = "sample_protocol",
+        split.by = "library_name",
         cols = "RdBu",
         dot.scale = 5
         ) +
@@ -291,7 +278,7 @@ seurat_obj <- AddModuleScore_UCell(seurat_obj,
 VlnPlot(
   seurat_obj,
   features = "vandenBrinketal_up_genes_UCell",
-  group.by ="sample_protocol",
+  group.by ="library_name",
   cols = palette_color_factor, 
   pt.size = 0) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
@@ -308,8 +295,7 @@ VlnPlot(
 VlnPlot(
   seurat_obj,
   features = "vandenBrinketal_up_genes_UCell",
-  group.by = "replicate",
-  split.by = "sample_protocol",
+  group.by = "library_name",
   cols = palette_color_factor, 
   pt.size = 0) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
@@ -319,7 +305,6 @@ VlnPlot(
         axis.text = element_text(size=18),
         axis.title.x = element_blank(),
         strip.text = element_text(size=20))  &
-  aes(alpha=seurat_obj$replicate) &
   scale_alpha_discrete(range = c(0.5, 1))&
   scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
 ```
@@ -329,7 +314,7 @@ VlnPlot(
   seurat_obj,
   features = "vandenBrinketal_up_genes_UCell",
   group.by = "celltypes",
-  split.by = "sample_protocol",
+  split.by = "library_name",
   cols = palette_color_factor, 
   pt.size = 0) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
@@ -340,30 +325,12 @@ VlnPlot(
         axis.title.x = element_blank(),
         strip.text = element_text(size=20))&
   scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
-```
 
-```{r fig.width=12, fig.height=8}
-VlnPlot(
-  seurat_obj,
-  features = "vandenBrinketal_up_genes_UCell",
-  group.by = "celltypes",
-  split.by = "library_name",
-  cols = palette_color_library, 
-  pt.size = 0) &
-  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
-               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
-  ggpubr::stat_compare_means(method = "wilcox.test", label = "p.signif", label.y.npc = 1, label.x.npc = 0.5, size=5)&
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-        axis.text = element_text(size=18),
-        axis.title.x = element_blank(),
-        strip.text = element_text(size=20))&
-  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
-
-
-ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_vandenBrinketalUPgenes_Ucell_Vlnbycells.svg"),
+ggsave(paste0(path_r_figs_out, "/MouseLung_cryopreserved_vandenBrinketalUPgenes_Ucell_Vlnbycells.svg"),
        width = 12, height = 8,
        dpi = 300)
 ```
+
 
 ```{r fig.width=20, fig.height=5}
 plot_density(seurat_obj,
@@ -371,15 +338,15 @@ plot_density(seurat_obj,
     facet_grid(.~seurat_obj$library_name)
 
 
-ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_vandenBrinketalUPgenes_Ucelldensity.svg"),
+ggsave(paste0(path_r_figs_out, "/MouseLung_cryopreserved_vandenBrinketalUPgenes_Ucelldensity.svg"),
        width = 10, height = 5,
        dpi = 300)
 ```
 
-## Comparing signature with Fresh sDEgenes
+## Comparing signature with Cryo sDEgenes
 ```{r}
 path_r_objects <- here::here("04_GEX_analysis/4_DE_GO_GSEA/results/R_objects")
-path_object_DEgenes <- paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_DEgenes_Fixed_vs_Fresh.rds")
+path_object_DEgenes <- paste0(path_r_objects, "/FIXnCUT_MouseLung_cryopreserved_DEgenes_FixedCryo_vs_Cryo.rds")
 DE_genes <- readRDS(path_object_DEgenes)
 
 DE_genes_DOWN_df <- DE_genes %>% 
@@ -420,7 +387,7 @@ print(signature_genes_intersection)
 DotPlot(seurat_obj,
         features = signature_genes_intersection,
         group.by = "celltypes",
-        split.by = "sample_protocol",
+        split.by = "library_name",
         cols = "RdBu",
         dot.scale = 5
         ) +
@@ -429,7 +396,7 @@ DotPlot(seurat_obj,
   theme(axis.title = element_blank(),
         legend.position = "bottom")
 
-ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_vandenBrinketalUPgenes_DEgenes.svg"),
+ggsave(paste0(path_r_figs_out, "/MouseLung_cryopreserved_vandenBrinketalUPgenes_DEgenes.svg"),
        width = 12, height = 9,
        dpi = 300)
 ```
@@ -457,7 +424,7 @@ print(OFlanaganetal_up_genes_list)
 DotPlot(seurat_obj,
         features = OFlanaganetal_up_genes_list,
         group.by = "celltypes",
-        split.by = "sample_protocol",
+        split.by = "library_name",
         cols = "RdBu",
         dot.scale = 5
         ) +
@@ -478,7 +445,7 @@ seurat_obj <- AddModuleScore_UCell(seurat_obj,
 VlnPlot(
   seurat_obj,
   features = "OFlanaganetal_up_genes_UCell",
-  group.by ="sample_protocol",
+  group.by ="library_name",
   cols = palette_color_factor, 
   pt.size = 0) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
@@ -491,43 +458,6 @@ VlnPlot(
   scale_y_continuous(expand = expansion(mult = c(0.1, 0.1))) 
 ```
 
-```{r fig.width=8, fig.height=5}
-VlnPlot(
-  seurat_obj,
-  features = "OFlanaganetal_up_genes_UCell",
-  group.by = "replicate",
-  split.by = "sample_protocol",
-  cols = palette_color_factor, 
-  pt.size = 0) &
-  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
-               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
-  ggpubr::stat_compare_means(method = "wilcox.test", label = "..p.format..", label.y.npc = 1, label.x.npc = 0.5, size=5)&
-  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
-        axis.text = element_text(size=18),
-        axis.title.x = element_blank(),
-        strip.text = element_text(size=20))  &
-  aes(alpha=seurat_obj$replicate) &
-  scale_alpha_discrete(range = c(0.5, 1))&
-  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
-```
-
-```{r fig.width=12, fig.height=8}
-VlnPlot(
-  seurat_obj,
-  features = "OFlanaganetal_up_genes_UCell",
-  group.by = "celltypes",
-  split.by = "sample_protocol",
-  cols = palette_color_factor, 
-  pt.size = 0) &
-  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
-               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
-  ggpubr::stat_compare_means(method = "wilcox.test", label = "p.signif", label.y.npc = 1, label.x.npc = 0.5, size=5)&
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-        axis.text = element_text(size=18),
-        axis.title.x = element_blank(),
-        strip.text = element_text(size=20))&
-  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
-```
 
 ```{r fig.width=12, fig.height=8}
 VlnPlot(
@@ -535,7 +465,7 @@ VlnPlot(
   features = "OFlanaganetal_up_genes_UCell",
   group.by = "celltypes",
   split.by = "library_name",
-  cols = palette_color_library, 
+  cols = palette_color_factor, 
   pt.size = 0) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
                geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
@@ -547,7 +477,7 @@ VlnPlot(
   scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
 
 
-ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_OFlanaganetalUPgenes_Ucell_Vlnbycells.svg"),
+ggsave(paste0(path_r_figs_out, "/MouseLung_cryopreserved_OFlanaganetalUPgenes_Ucell_Vlnbycells.svg"),
        width = 12, height = 8,
        dpi = 300)
 ```
@@ -558,16 +488,16 @@ plot_density(seurat_obj,
     facet_grid(.~seurat_obj$library_name)
 
 
-ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_OFlanaganetalUPgenes_Ucelldensity.svg"),
+ggsave(paste0(path_r_figs_out, "/MouseLung_cryopreserved_OFlanaganetalUPgenes_Ucelldensity.svg"),
        width = 10, height = 5,
        dpi = 300)
 ```
 
 
-## Comparing signature with Fresh sDEgenes
+## Comparing signature with Cryo sDEgenes
 ```{r}
 path_r_objects <- here::here("04_GEX_analysis/4_DE_GO_GSEA/results/R_objects")
-path_object_DEgenes <- paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_DEgenes_Fixed_vs_Fresh.rds")
+path_object_DEgenes <- paste0(path_r_objects, "/FIXnCUT_MouseLung_cryopreserved_DEgenes_FixedCryo_vs_Cryo.rds")
 DE_genes <- readRDS(path_object_DEgenes)
 
 DE_genes_DOWN_df <- DE_genes %>% 
@@ -608,7 +538,7 @@ print(signature_genes_intersection)
 DotPlot(seurat_obj,
         features = signature_genes_intersection,
         group.by = "celltypes",
-        split.by = "sample_protocol",
+        split.by = "library_name",
         cols = "RdBu",
         dot.scale = 5
         ) +
@@ -617,7 +547,7 @@ DotPlot(seurat_obj,
   theme(axis.title = element_blank(),
         legend.position = "bottom")
 
-ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_OFlanaganetalUPgenes_DEgenes.svg"),
+ggsave(paste0(path_r_figs_out, "/MouseLung_cryopreserved_OFlanaganetalUPgenes_DEgenes.svg"),
        width = 12, height = 9,
        dpi = 300)
 ```
@@ -644,7 +574,7 @@ print(Denisenkoatal_up_genes_list)
 DotPlot(seurat_obj,
         features = Denisenkoatal_up_genes_list,
         group.by = "celltypes",
-        split.by = "sample_protocol",
+        split.by = "library_name",
         cols = "RdBu",
         dot.scale = 5
         ) +
@@ -666,7 +596,7 @@ seurat_obj <- AddModuleScore_UCell(seurat_obj,
 VlnPlot(
   seurat_obj,
   features = "Denisenkoatal_up_genes_UCell",
-  group.by ="sample_protocol",
+  group.by ="library_name",
   cols = palette_color_factor, 
   pt.size = 0) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
@@ -676,44 +606,6 @@ VlnPlot(
         axis.text = element_text(size=18),
         axis.title.x = element_blank(),
         strip.text = element_text(size=20)) &
-  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
-```
-
-```{r fig.width=8, fig.height=5}
-VlnPlot(
-  seurat_obj,
-  features = "Denisenkoatal_up_genes_UCell",
-  group.by = "replicate",
-  split.by = "sample_protocol",
-  cols = palette_color_factor, 
-  pt.size = 0) &
-  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
-               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
-  ggpubr::stat_compare_means(method = "wilcox.test", label = "..p.format..", label.y.npc = 1, label.x.npc = 0.5, size=5)&
-  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
-        axis.text = element_text(size=18),
-        axis.title.x = element_blank(),
-        strip.text = element_text(size=20))  &
-  aes(alpha=seurat_obj$replicate) &
-  scale_alpha_discrete(range = c(0.5, 1))&
-  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
-```
-
-```{r fig.width=12, fig.height=8}
-VlnPlot(
-  seurat_obj,
-  features = "Denisenkoatal_up_genes_UCell",
-  group.by = "celltypes",
-  split.by = "sample_protocol",
-  cols = palette_color_factor, 
-  pt.size = 0) &
-  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
-               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
-  ggpubr::stat_compare_means(method = "wilcox.test", label = "p.signif", label.y.npc = 1, label.x.npc = 0.5, size=5)&
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-        axis.text = element_text(size=18),
-        axis.title.x = element_blank(),
-        strip.text = element_text(size=20))&
   scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
 ```
 
@@ -724,7 +616,7 @@ VlnPlot(
   features = "Denisenkoatal_up_genes_UCell",
   group.by = "celltypes",
   split.by = "library_name",
-  cols = palette_color_library, 
+  cols = palette_color_factor, 
   pt.size = 0) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
                geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
@@ -736,7 +628,7 @@ VlnPlot(
   scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
 
 
-ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_DenisenkoatalUPgenes_Ucell_Vlnbycells.svg"),
+ggsave(paste0(path_r_figs_out, "/MouseLung_cryopreserved_DenisenkoatalUPgenes_Ucell_Vlnbycells.svg"),
        width = 12, height = 8,
        dpi = 300)
 ```
@@ -747,23 +639,28 @@ plot_density(seurat_obj,
     facet_grid(.~seurat_obj$library_name)
 
 
-ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_DenisenkoatalUPgenes_Ucelldensity.svg"),
+ggsave(paste0(path_r_figs_out, "/MouseLung_cryopreserved_DenisenkoatalUPgenes_Ucelldensity.svg"),
        width = 10, height = 5,
        dpi = 300)
 ```
 
 
 
-## Comparing signature with Fresh sDEgenes
+## Comparing signature with Cryo sDEgenes
 ```{r}
 path_r_objects <- here::here("04_GEX_analysis/4_DE_GO_GSEA/results/R_objects")
-path_object_DEgenes <- paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_DEgenes_Fixed_vs_Fresh.rds")
+path_object_DEgenes <- paste0(path_r_objects, "/FIXnCUT_MouseLung_cryopreserved_DEgenes_FixedCryo_vs_Cryo.rds")
 DE_genes <- readRDS(path_object_DEgenes)
 
 DE_genes_DOWN_df <- DE_genes %>% 
     dplyr::filter(is_significant & avg_log2FC < 0) %>% 
     dplyr::select(gene, avg_log2FC, p_val_adj)
 DE_genes_DOWN_list <- DE_genes_DOWN_df$gene
+
+DE_genes_UP_df <- DE_genes %>% 
+    dplyr::filter(is_significant & avg_log2FC > 0) %>% 
+    dplyr::select(gene, avg_log2FC, p_val_adj)
+DE_genes_UP_list <- DE_genes_UP_df$gene
 ```
 
 ```{r fig.height=4, fig.width=4}
@@ -798,7 +695,7 @@ print(signature_genes_intersection)
 DotPlot(seurat_obj,
         features = signature_genes_intersection,
         group.by = "celltypes",
-        split.by = "sample_protocol",
+        split.by = "library_name",
         cols = "RdBu",
         dot.scale = 5
         ) +
@@ -807,7 +704,7 @@ DotPlot(seurat_obj,
   theme(axis.title = element_blank(),
         legend.position = "bottom")
 
-ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_DenisenkoetalUPgenes_DEgenes.svg"),
+ggsave(paste0(path_r_figs_out, "/MouseLung_cryopreserved_DenisenkoetalUPgenes_DEgenes.svg"),
        width = 12, height = 9,
        dpi = 300)
 ```
@@ -839,6 +736,55 @@ grid::grid.draw(venndiagram)
 ```
 
 
+```{r fig.height=4, fig.width=4}
+venndiagram <- VennDiagram::venn.diagram(
+  x = list(DE_genes_UP_list, 
+           vandenBrinketal_up_genes_list,
+           OFlanaganetal_up_genes_list,
+           Denisenkoatal_up_genes_list),
+  category.names = c("DE Cryo", " ", " ", " "),
+  filename = NULL,
+  fill = c("#023047", "#ffb703", "#3DED97", "#E3242B"),
+  lty = 'blank',
+  
+  cex = 1.5,
+  fontfamily = "sans",
+
+  cat.cex = 1,  
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.fontfamily = "sans"
+)
+
+grid::grid.newpage()
+grid::grid.draw(venndiagram)
+```
+
+
+#### Full analysis
+```{r fig.height=6, fig.width=10}
+library(UpSetR)
+
+UpSetR::upset(
+  UpSetR::fromList(list(
+    "DEG in Cryo-only" = DE_genes_DOWN_list,
+    "DEG in Fixed+Cryo" = DE_genes_UP_list,
+    "Warm collagenase-associated" = vandenBrinketal_up_genes_list,
+    "Dissociation-associated" = OFlanaganetal_up_genes_list,
+    "Warm-dissociation" = Denisenkoatal_up_genes_list
+  )),
+  order.by = "freq",
+  #group.by = "sets",
+  mainbar.y.label = "# Genes", sets.x.label = "# Genes / sample",
+  point.size = 5, line.size = 1, text.scale = 2,
+  #empty.intersections = "on",
+   queries = list(
+     list(query = intersects, params = list("DEG in Cryo-only"), color = "#8DA0CB", active = T),
+     list(query = intersects, params = list("DEG in Fixed+Cryo"), color = "#E78AC3", active = T)
+     )
+)
+```
+
 # OTHER SIGNATURES: PBMC-related
 ## SIGNATURE: Sampling-time on single-cell PBMC by Massoni-Badosa et al.
 ```{r fig.width=20, fig.height=8}
@@ -862,7 +808,7 @@ print(Massonietal_up_genes_list)
 DotPlot(seurat_obj,
         features = Massonietal_up_genes_list,
         group.by = "celltypes",
-        split.by = "sample_protocol",
+        split.by = "library_name",
         cols = "RdBu",
         dot.scale = 5
         ) +
@@ -879,49 +825,13 @@ seurat_obj <- AddModuleScore_UCell(seurat_obj,
 ```
 
 ### Visualizing Ucell
-
-```{r fig.width=8, fig.height=5}
-VlnPlot(
-  seurat_obj,
-  features = "Massonietal_up_genes_UCell",
-  group.by ="sample_protocol",
-  cols = palette_color_factor, 
-  pt.size = 0) &
-  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
-               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
-  ggpubr::stat_compare_means(method = "wilcox.test", label = "..p.format..", label.y.npc = 1, label.x.npc = 0.5, size=5)&
-  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
-        axis.text = element_text(size=18),
-        axis.title.x = element_blank(),
-        strip.text = element_text(size=20)) &
-  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
-```
-
-```{r fig.width=8, fig.height=5}
-VlnPlot(
-  seurat_obj,
-  features = "Massonietal_up_genes_UCell",
-  group.by = "replicate",
-  split.by = "sample_protocol",
-  cols = palette_color_factor, 
-  pt.size = 0) &
-  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
-               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
-  ggpubr::stat_compare_means(method = "wilcox.test", label = "..p.format..", label.y.npc = 1, label.x.npc = 0.5, size=5)&
-  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
-        axis.text = element_text(size=18),
-        axis.title.x = element_blank(),
-        strip.text = element_text(size=20)) &
-  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
-```
-
 ```{r fig.width=12, fig.height=8}
 VlnPlot(
   seurat_obj,
   features = "Massonietal_up_genes_UCell",
   group.by = "celltypes",
   split.by = "library_name",
-  cols = palette_color_library, 
+  cols = palette_color_factor, 
   pt.size = 0) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
                geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
@@ -933,7 +843,7 @@ VlnPlot(
   scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
 
 
-ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_MassonietalUPgenes_Ucell_Vlnbycells.svg"),
+ggsave(paste0(path_r_figs_out, "/MouseLung_cryopreserved_MassonietalUPgenes_Ucell_Vlnbycells.svg"),
        width = 12, height = 8,
        dpi = 300)
 ```
@@ -944,16 +854,16 @@ plot_density(seurat_obj,
     facet_grid(.~seurat_obj$library_name)
 
 
-ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_MassonietalUPgenes_Ucelldensity.svg"),
+ggsave(paste0(path_r_figs_out, "/MouseLung_cryopreserved_MassonietalUPgenes_Ucelldensity.svg"),
        width = 10, height = 5,
        dpi = 300)
 ```
 
 
-### Comparing Massonietal. signature with Fresh sDEgenes
+### Comparing Massonietal. signature with Cryo sDEgenes
 ```{r}
 path_r_objects <- here::here("04_GEX_analysis/4_DE_GO_GSEA/results/R_objects")
-path_object_DEgenes <- paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_DEgenes_Fixed_vs_Fresh.rds")
+path_object_DEgenes <- paste0(path_r_objects, "/FIXnCUT_MouseLung_cryopreserved_DEgenes_FixedCryo_vs_Cryo.rds")
 DE_genes <- readRDS(path_object_DEgenes)
 
 DE_genes_DOWN_df <- DE_genes %>% 
@@ -994,7 +904,7 @@ print(signature_genes_intersection)
 DotPlot(seurat_obj,
         features = signature_genes_intersection,
         group.by = "celltypes",
-        split.by = "sample_protocol",
+        split.by = "library_name",
         cols = "RdBu",
         dot.scale = 5
         ) +
@@ -1003,7 +913,7 @@ DotPlot(seurat_obj,
   theme(axis.title = element_blank(),
         legend.position = "bottom")
 
-ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_MassonietalUPgenes_DEgenes.svg"),
+ggsave(paste0(path_r_figs_out, "/MouseLung_cryopreserved_MassonietalUPgenes_DEgenes.svg"),
        width = 12, height = 8,
        dpi = 300)
 ```
@@ -1032,7 +942,7 @@ print(Baechleretal_up_genes_list)
 DotPlot(seurat_obj,
         features = Baechleretal_up_genes_list,
         group.by = "celltypes",
-        split.by = "sample_protocol",
+        split.by = "library_name",
         cols = "RdBu",
         dot.scale = 5
         ) +
@@ -1053,25 +963,7 @@ seurat_obj <- AddModuleScore_UCell(seurat_obj,
 VlnPlot(
   seurat_obj,
   features = "Baechleretal_up_genes_UCell",
-  group.by ="sample_protocol",
-  cols = palette_color_factor, 
-  pt.size = 0) &
-  stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
-               geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
-  ggpubr::stat_compare_means(method = "wilcox.test", label = "..p.format..", label.y.npc = 1, label.x.npc = 0.5, size=5)&
-  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5),
-        axis.text = element_text(size=18),
-        axis.title.x = element_blank(),
-        strip.text = element_text(size=20)) &
-  scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
-```
-
-```{r fig.width=8, fig.height=5}
-VlnPlot(
-  seurat_obj,
-  features = "Baechleretal_up_genes_UCell",
-  group.by = "replicate",
-  split.by = "sample_protocol",
+  group.by ="library_name",
   cols = palette_color_factor, 
   pt.size = 0) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
@@ -1090,7 +982,7 @@ VlnPlot(
   features = "Baechleretal_up_genes_UCell",
   group.by = "celltypes",
   split.by = "library_name",
-  cols = palette_color_library, 
+  cols = palette_color_factor, 
   pt.size = 0) &
   stat_summary(fun.y = median, fun.ymin = median, fun.ymax = median,
                geom='crossbar', colour = "black", width=0.25, position = position_dodge(width = .25)) &
@@ -1102,7 +994,7 @@ VlnPlot(
   scale_y_continuous(expand = expansion(mult = c(0.1, 0.1)))
 
 
-ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_BaechleretalUPgenes_Ucell_Vlnbycells.svg"),
+ggsave(paste0(path_r_figs_out, "/MouseLung_cryopreserved_BaechleretalUPgenes_Ucell_Vlnbycells.svg"),
        width = 12, height = 8,
        dpi = 300)
 ```
@@ -1113,16 +1005,16 @@ plot_density(seurat_obj,
     facet_grid(.~seurat_obj$library_name)
 
 
-ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_BaechleretalUPgenes_Ucelldensity.svg"),
+ggsave(paste0(path_r_figs_out, "/MouseLung_cryopreserved_BaechleretalUPgenes_Ucelldensity.svg"),
        width = 10, height = 5,
        dpi = 300)
 ```
 
 
-### Comparing Baechleretal. signature with Fresh sDEgenes
+### Comparing Baechleretal. signature with Cryo sDEgenes
 ```{r}
 path_r_objects <- here::here("04_GEX_analysis/4_DE_GO_GSEA/results/R_objects")
-path_object_DEgenes <- paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_DEgenes_Fixed_vs_Fresh.rds")
+path_object_DEgenes <- paste0(path_r_objects, "/FIXnCUT_MouseLung_cryopreserved_DEgenes_FixedCryo_vs_Cryo.rds")
 DE_genes <- readRDS(path_object_DEgenes)
 
 DE_genes_DOWN_df <- DE_genes %>% 
@@ -1163,7 +1055,7 @@ print(signature_genes_intersection)
 DotPlot(seurat_obj,
         features = signature_genes_intersection,
         group.by = "celltypes",
-        split.by = "sample_protocol",
+        split.by = "library_name",
         cols = "RdBu",
         dot.scale = 5
         ) +
@@ -1172,7 +1064,7 @@ DotPlot(seurat_obj,
   theme(axis.title = element_blank(),
         legend.position = "bottom")
 
-ggsave(paste0(path_r_figs_out, "/MouseLung_fixed_BaechleretalUPgenes_DEgenes.svg"),
+ggsave(paste0(path_r_figs_out, "/MouseLung_cryopreserved_BaechleretalUPgenes_DEgenes.svg"),
        width = 12, height = 8,
        dpi = 300)
 ```

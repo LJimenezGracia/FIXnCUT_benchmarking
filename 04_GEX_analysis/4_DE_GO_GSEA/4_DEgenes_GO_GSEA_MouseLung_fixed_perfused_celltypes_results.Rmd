@@ -86,7 +86,7 @@ for (index in 1:length(comparison_name_list)) {
   group_2 <- group_2_list[[index]]
 
   # Load data
-  path_object <- paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_DEgenes_cells_", comparison_name, ".rds")
+  path_object <- paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_perfused_DEgenes_cells_", comparison_name, ".rds")
   DE_genes_bycell <- readRDS(path_object)
   
   # Data exploration
@@ -114,7 +114,7 @@ for (index in 1:length(comparison_name_list)) {
   print(full_plot)  
   
   # Save results
-  path_volcanoplot <- paste0(path_r_figs, "/FIXnCUT_MouseLung_fixed_DEAcells_", comparison_name, ".svg")
+  path_volcanoplot <- paste0(path_r_figs, "/FIXnCUT_MouseLung_fixed_perfused_DEAcells_", comparison_name, ".svg")
   ggsave(filename = path_volcanoplot, plot = full_plot, width = 30, height = 30, dpi = 300)
 
 
@@ -177,10 +177,10 @@ for (index in 1:length(comparison_name_list)) {
     }
   }
   # Save results
-  path_GSEArds <- paste0(path_r_objects, "/GSEA/FIXnCUT_MouseLung_fixed_GSEAcells_", comparison_name, "_", category_db ,".rds")
+  path_GSEArds <- paste0(path_r_objects, "/GSEA/FIXnCUT_MouseLung_fixed_perfused_GSEAcells_", comparison_name, "_", category_db ,".rds")
   saveRDS(fgsea_vector, file = path_GSEArds)
   
-  results_path <- paste0(path_r_tables, "/GSEA/FIXnCUT_MouseLung_fixed_GSEAcells_", comparison_name, "_", category_db ,".xlsx")
+  results_path <- paste0(path_r_tables, "/GSEA/FIXnCUT_MouseLung_fixed_perfused_GSEAcells_", comparison_name, "_", category_db ,".xlsx")
   openxlsx::write.xlsx(fgsea_vector, file = results_path)
 }
 ```

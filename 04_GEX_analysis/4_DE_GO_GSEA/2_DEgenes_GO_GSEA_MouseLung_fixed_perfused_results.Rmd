@@ -56,7 +56,7 @@ for (index in 1:length(comparison_name_list)) {
   group_2 <- group_2_list[[index]]
   
   # Load data
-  path_object <- paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_DEgenes_", comparison_name, ".rds")
+  path_object <- paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_perfused_DEgenes_", comparison_name, ".rds")
   DE_genes <- readRDS(path_object)
   
   # Data exploration
@@ -85,7 +85,7 @@ for (index in 1:length(comparison_name_list)) {
   print(gg_volcanoplot)
   
   # Save results
-  path_volcanoplot <- paste0(path_r_figs, "/FIXnCUT_MouseLung_fixed_DEA_", comparison_name, ".svg")
+  path_volcanoplot <- paste0(path_r_figs, "/FIXnCUT_MouseLung_fixed_perfused_DEA_", comparison_name, ".svg")
   ggsave(filename = path_volcanoplot, plot = gg_volcanoplot, width = 9, height = 6, dpi = 300)
 }
 ```
@@ -124,7 +124,7 @@ for (index_1 in 1:length(comparison_name_list)) {
   group_2 <- group_2_list[[index_1]]
   
   # Load data
-  path_object <- paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_DEgenes_", comparison_name, ".rds")
+  path_object <- paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_perfused_DEgenes_", comparison_name, ".rds")
   DE_genes <- readRDS(path_object)
 
   # GSEA analysis
@@ -175,13 +175,13 @@ for (index_1 in 1:length(comparison_name_list)) {
   print(gg_GSEAresults)
   
   # Save results
-  path_GSEArds <- paste0(path_r_objects, "/GSEA/FIXnCUT_MouseLung_fixed_GSEA_", comparison_name, "_", category_db ,".rds")
+  path_GSEArds <- paste0(path_r_objects, "/GSEA/FIXnCUT_MouseLung_fixed_perfused_GSEA_", comparison_name, "_", category_db ,".rds")
   saveRDS(fgseaRes_split, file = path_GSEArds)
   
-  path_GSEAtable <- paste0(path_r_figs, "/GSEA/FIXnCUT_MouseLung_fixed_GSEAtop_", comparison_name, "_", category_db , ".svg")
+  path_GSEAtable <- paste0(path_r_figs, "/GSEA/FIXnCUT_MouseLung_fixed_perfused_GSEAtop_", comparison_name, "_", category_db , ".svg")
   ggsave(plot = gg_GSEAresults, filename = path_GSEAtable, width = 15, height = 10, dpi = 300)
   
-  results_path <- paste0(path_r_tables, "/GSEA/FIXnCUT_MouseLung_fixed_GSEA_", comparison_name, "_", category_db ,".xlsx")
+  results_path <- paste0(path_r_tables, "/GSEA/FIXnCUT_MouseLung_fixed_perfused_GSEA_", comparison_name, "_", category_db ,".xlsx")
   openxlsx::write.xlsx(fgseaRes_split, file = results_path)
 }
 ```

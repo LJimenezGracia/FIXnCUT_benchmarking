@@ -28,7 +28,7 @@ group_1_list <- c("Fixed", "Fixed+Cryopreserved", "Fixed+Cryopreserved")
 group_2_list <- c("Cryopreserved", "Cryopreserved", "Fixed")
 
 ## Load data
-seurat_obj <- readRDS(paste0(path_r_objects_in, "/FIXnCUT_MouseLung_cryopreserved_clustering_annotation_cleaned-NoNeutrophils.rds"))
+seurat_obj <- readRDS(paste0(path_r_objects_in, "/FIXnCUT_MouseLung_cryopreserved_clustering_annotation_cleaned.rds"))
 
 
 for (index in 1:length(comparison_name_list)) {

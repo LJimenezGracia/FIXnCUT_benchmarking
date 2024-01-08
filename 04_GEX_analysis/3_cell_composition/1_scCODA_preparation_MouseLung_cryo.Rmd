@@ -49,7 +49,7 @@ names(color_palette) <- NULL
 The data used in this Rmarkdown document comes from **FIX** dataset.
 ```{r}
 # using cleaned data
-seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_MouseLung_cryopreserved_clustering_annotation_cleaned-NoNeutrophils.rds"))
+seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_MouseLung_cryopreserved_clustering_annotation_cleaned.rds"))
 seurat_obj_metadata <- seurat_obj@meta.data
 rm(seurat_obj)
 head(seurat_obj_metadata)

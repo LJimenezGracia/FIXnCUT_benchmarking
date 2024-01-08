@@ -71,8 +71,9 @@ sccoda_effect_global_df$Cell.Type[sccoda_effect_global_df$Cell.Type == "Transit-
 
 
 # Lock plot order making a factor level order
-cells_order <- c("CD4+ T cells", "CD8+ T cells", "NK cells", "M0 macrophages", "M2 macrophages", 
-                                               "B cells", "B cells cycling", "Plasma cells", "Plasmablasts", "Mast cells",
+cells_order <- c("B cells", "B cells cycling", "Plasma cells", "Plasmablasts",
+                 "CD4+ T cells", "CD8+ T cells", "NK cells", "M0 macrophages", "M2 macrophages", 
+                                               "Mast cells",
                                                 "Colonocytes 1", "Colonocytes 2", "Colonocytes PLCG2+", "Colonocytes BEST4+OTOP2+",
                                                "Transit-amplifying (TA) cells", "Goblet cells", "Tuft cells", 
                                                "Endothelium", "Myofibroblasts", "Stromal cells", "Glia", "Cycling cells")

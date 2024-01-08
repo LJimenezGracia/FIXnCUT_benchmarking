@@ -76,7 +76,7 @@ DT::datatable(metadata, options = list(scrollX = TRUE))
 seurat_obj <- readRDS(str_c(path_r_objects, "/FIXnCUT_MouseColon_filtered_post_clustering_annotation.rds"))
 
 seurat_obj$celltypes <- factor(x = seurat_obj$celltypes,
-                                    levels = c("T-NK cells", "Myeloid cells", "Immature B cells", "Mature B cells",
+                                    levels = c("Immature B cells", "Mature B cells", "T-NK cells", "Myeloid cells", 
                                                "Distal Colonocytes", "Distal Colonocytes Emp1+", "Proximal Colonocytes",
                                                "Transit-amplifying (TA) cells", "Goblet cells", "Paneth cells", "Tuft cells",
                                                "Enteroendocrine (EEC) cells", "Endothelium", "Lymphatic Endothelial cells",
