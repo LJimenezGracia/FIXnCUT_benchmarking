@@ -532,8 +532,8 @@ VlnPlot(
 
 
 ```{r fig.width=20, fig.height=10}
-epithelial_cells <- c("Epcam", "Col1a1", "Col13a1", "Col14a1", # fibros 
-                      "Postn", "Gucy1a1", "Gucy1b1", "Pdzd2") 
+epithelial_cells <- c("Epcam", "Col1a1", "Col13a1", "Col14a1", # Stromal 
+                      "Postn", "Gucy1a1", "Gucy1b1", "Pdzd2") #Endothelial
 
 FeaturePlot(seurat_obj,
             features = epithelial_cells,
@@ -693,8 +693,8 @@ seurat_obj <- RenameIdents(
  "6" = "Alveolar Macrophages",
  "7" = "Capillary aerocyte (aCap) cells",
  "8" = "T cells",
- "9" = "Fibroblasts",
- "10" = "Macrophages Apoe+",
+ "9" = "Stromal cells",
+ "10" = "Intersticial Macrophages",
  "11_0" = "Pneumocytes Type II",
  "11_1" = "Pneumocytes Type I",
  "11_2" = "Club cells",
@@ -702,17 +702,17 @@ seurat_obj <- RenameIdents(
  "12_1" = "Lymphatic Endothelial cells", 
  "13" = "Bipotent Capillary cells",
  "14" = "Pneumocytes Type I",
- "15" = "Pericytes",
- "16_0" = "Fibroblasts",
- "16_1" = "Pericytes",
+ "15" = "Endothelial cells",
+ "16_0" = "Stromal cells",
+ "16_1" = "Endothelial cells",
  "17" = "NK cells",
  "18" = "Monocyte-derived DCs", 
- "19" = "Neutrophils",
+ "19" = "Doublets",
  "20" = "Cycling cells",
- "21" = "Monocytes", 
+ "21" = "Doublets", 
  "22" = "Doublets",
- "23" = "Monocytes", 
- "24" = "Low quality cells"
+ "23" = "Doublets", 
+ "24" = "Doublets"
  )
 
 # Creating new annotation variable
@@ -790,7 +790,7 @@ saveRDS(seurat_obj, paste0(path_r_objects, "/FIXnCUT_MouseLung_cryopreserved_clu
 # Remove uninteresting cells
 ```{r}
 Idents(seurat_obj) <- "celltypes"
-cells_to_remove <- c("Doublets", "Low quality cells")
+cells_to_remove <- c("Doublets") #, "Low quality cells"
 
 seurat_obj_cleaned <- subset(seurat_obj, idents = cells_to_remove, invert = TRUE)
 seurat_obj_cleaned$celltypes <- as.factor(as.character(seurat_obj_cleaned$celltypes))
@@ -857,19 +857,6 @@ saveRDS(seurat_obj_cleaned$celltypes,
 # Save Seurat object
 saveRDS(seurat_obj_cleaned, paste0(path_r_objects, "/FIXnCUT_MouseLung_cryopreserved_clustering_annotation_cleaned.rds"))
 #seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_MouseLung_cryopreserved_clustering_annotation_cleaned.rds"))
-```
-
-
-# Without Neutrophils
-```{r}
-Idents(seurat_obj_cleaned) <- "celltypes"
-cells_to_remove <- c("Neutrophils")
-seurat_obj_c <- subset(seurat_obj_cleaned, idents = cells_to_remove, invert = TRUE)
-seurat_obj_c$celltypes <- as.factor(as.character(seurat_obj_c$celltypes))
-
-# Save Seurat object
-saveRDS(seurat_obj_c, paste0(path_r_objects, "/FIXnCUT_MouseLung_cryopreserved_clustering_annotation_cleaned-NoNeutrophils.rds"))
-#seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_MouseLung_cryopreserved_clustering_annotation_cleaned-NoNeutrophils.rds"))
 ```
 
 

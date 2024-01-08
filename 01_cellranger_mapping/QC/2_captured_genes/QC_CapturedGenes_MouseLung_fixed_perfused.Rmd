@@ -1,0 +1,430 @@
+---
+title: "scRNAseq Captured Genes: Mouse Lung (perfused)"
+author: "Laura Jiménez Gracia"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    number_sections: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+```
+
+# Introduction
+
+## Objective
+In this Rmarkdown document, we are going to 
+
+# Pre-processing
+## Libraries
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(Seurat)
+library(ggrepel)
+library(UpSetR)
+library(gt)
+library(grid)
+library(ggplot2)
+```
+
+## Parameters
+Here we will define and load objects and functions that will be used throughout the document.
+```{r}
+# Paths
+path_project_metadata <- here::here("01_cellranger_mapping/data/FIXnCUT_metadata.csv")
+path_r_objects <- here::here("02_QC/results/R_objects")
+
+# Functions
+source(here::here("bin/utils.R"))
+
+fromList_togetdata <- function (input) {
+  # Same as original fromList()...
+  elements <- unique(unlist(input))
+  data <- unlist(lapply(input, function(x) {
+      x <- as.vector(match(elements, x))
+      }))
+  data[is.na(data)] <- as.integer(0)
+  data[data != 0] <- as.integer(1)
+  data <- data.frame(matrix(data, ncol = length(input), byrow = F))
+  data <- data[which(rowSums(data) != 0), ]
+  names(data) <- names(input)
+  # ... Except now it conserves your original value names!
+  row.names(data) <- elements
+  return(data)
+  }
+```
+
+
+## Load data
+The data used in this Rmarkdown document comes from **SCGTEST_32** dataset, filtered matrices were processed with `cellranger v6.1.1`, and the doublet predictions were obtained using `scrublet`.
+```{r}
+# Load all metadata information
+metadata <- read.csv(path_project_metadata)
+subproject_folder_n <- "MouseLung_fixed_perfused"
+
+# Merging metadata tables
+metadata <- metadata %>% 
+  filter(subproject == "SCGTEST_33"
+         & tissue == "Lung"
+         & ( sample_protocol == "Fresh" | sample_protocol == "Fix&Cut_24h"))
+
+# Modify metadata
+metadata$library_name[metadata$library_name == "Lung_fresh"] <- "Fresh"
+metadata$library_name[metadata$library_name == "Lung_fixed_24h"] <- "Fixed"
+
+metadata$sample_protocol <- metadata$library_name
+
+
+print("Libraries/Samples metadata")
+DT::datatable(metadata, options = list(scrollX = TRUE))
+
+# Load object data -- from downsampled reads
+seurat_obj <- readRDS(str_c(path_r_objects, "/FIXnCUT_MouseLung_fixed_perfused_merged.rds"))
+seurat_obj <- Seurat::NormalizeData(seurat_obj,
+                                    normalization.method = "LogNormalize",
+                                    scale.factor = 10000,
+                                    margin = 1
+                                    )
+
+# Removing all genes that have expression 0
+n_cells <- Matrix::rowSums(seurat_obj[["RNA"]]@counts > 0)
+keep_genes <- rownames(seurat_obj)[n_cells > 0]
+seurat_obj <- subset(seurat_obj, features = keep_genes)
+
+
+# Mouse Genome Informatics DATAFRAME  
+musmusculus_genes_df <- read_tsv(file = "MGImarkerQuery_20231220_053210__gene.tsv")
+dim(musmusculus_genes_df)
+```
+
+
+# Exclusive genes by library
+```{r}
+seurat_obj_list <- SplitObject(seurat_obj, split.by = "library_name")
+
+
+seurat_obj_list <- purrr::map(seurat_obj_list, function(seurat) {
+  # Number of cells expressing each gene, excluding 0 counts
+  n_cells <- Matrix::rowSums(seurat[["RNA"]]@counts > 0)
+  
+  # Subset genes that are expressed in data
+  keep_genes <- rownames(seurat)[n_cells > 0]
+
+  # Filtering out genes expressed in few cells
+  seurat_obj <- subset(seurat, features = keep_genes)
+  seurat_obj  
+})
+seurat_obj_list
+```
+
+## Upset Plot
+https://github.com/hms-dbmi/UpSetR
+
+```{r fig.height=5, fig.width=12}
+UpSetR::upset(
+  UpSetR::fromList(list(
+    "Fresh" = rownames(seurat_obj_list$Fresh),
+    "Fixed" = rownames(seurat_obj_list$Fixed)
+  )),
+  order.by = "freq",
+  #group.by = "sets",
+  mainbar.y.label = "# Genes", sets.x.label = "# Genes / sample",
+  point.size = 5, line.size = 1, text.scale = 2,
+  empty.intersections = "on",
+   queries = list(
+     list(query = intersects, params = list("Fresh", "Fixed"), color = "blue", active = T),
+     list(query = intersects, params = list("Fresh"), color = "green", active = T),
+     list(query = intersects, params = list("Fixed"), color = "orange", active = T)
+     )
+  )
+```
+
+## Manual exploration
+```{r}
+genes_lib_df <- fromList_togetdata(list(
+    "Fresh" = rownames(seurat_obj_list$Fresh),
+    "Fixed" = rownames(seurat_obj_list$Fixed)
+  ))
+genes_lib_df <- genes_lib_df[order(row.names(genes_lib_df)), ]
+  
+head(genes_lib_df)
+```
+
+
+# Captured genes in ANY library
+```{r}
+genes_dataall <- Matrix::rowMeans(seurat_obj[["RNA"]]@data)
+length(genes_dataall)
+print(summary(genes_dataall))
+
+# Plot
+g_numall <- genes_dataall
+names(g_numall) <- NULL
+plot(density(g_numall), log="x")
+```
+
+# Captures genes in ALL libraries
+```{r}
+# Subsetting
+genes_common <- genes_lib_df %>% 
+  filter((Fresh == 1) & (Fixed == 1))
+genes_common <- rownames(genes_common)
+length(genes_common)
+
+genes_common_data <- rowMeans(seurat_obj[["RNA"]]@data[genes_common,])
+print(summary(genes_common_data))
+
+# Plot
+gcommon_num <- genes_common_data
+names(gcommon_num) <- NULL
+plot(density(gcommon_num), log="x")
+```
+
+### Function overview
+```{r}
+genes_common_df <- left_join(as.data.frame(genes_common), musmusculus_genes_df[c("Symbol", "Feature Type")], by = c("genes_common" = "Symbol"), all.x = TRUE)
+
+# Replace NA values with "NA" string
+genes_common_df$`Feature Type`[is.na(genes_common_df$`Feature Type`)] <- "NA"
+
+dim(genes_common_df)
+head(genes_common_df)
+
+
+genes_common_df <- genes_common_df %>%
+  mutate(FeatureType = `Feature Type`)
+
+genes_common_df <- genes_common_df %>%
+  mutate(FeatureType = case_when(
+    FeatureType == "lncRNA gene" ~ "non-coding RNA gene: lncRNA",
+    FeatureType == "antisense lncRNA gene" ~ "non-coding RNA gene: lncRNA",
+    FeatureType == "lincRNA gene" ~ "non-coding RNA gene: lncRNA",
+    FeatureType == "sense intronic lncRNA gene" ~ "non-coding RNA gene: lncRNA",
+    FeatureType == "sense overlapping lncRNA gene" ~ "non-coding RNA gene: lncRNA",
+    FeatureType == "bidirectional promoter lncRNA gene" ~ "non-coding RNA gene: lncRNA",
+    FeatureType == "non-coding RNA gene" ~ "non-coding RNA gene: others",    
+    FeatureType == "RNase MRP RNA gene" ~ "non-coding RNA gene: others",    
+    TRUE ~ as.character(FeatureType)
+  ))
+
+# Turn FeatureType into a factor and reorder levels
+genes_common_df <- genes_common_df %>%
+  mutate(FeatureType = factor(FeatureType, levels = c(
+    "protein coding gene",
+    "non-coding RNA gene: lncRNA",
+    "non-coding RNA gene: others",
+    "gene segment",
+    "NA"
+  )))
+
+
+common_percentage_data <- count(genes_common_df, FeatureType) %>%
+  mutate(percentage = round(n / sum(n) * 100),1)
+
+FeatureType_palette <- c("protein coding gene" = "#274C77",
+                         "non-coding RNA gene: lncRNA" = "#6096BA",
+                         "non-coding RNA gene: others" = "#A3CEF1",
+                         "gene segment" = "#E7ECEF",
+                          "NA" = "#8B8C89")
+
+ggplot(common_percentage_data, aes(x = "", y = n, fill = FeatureType)) +
+  geom_bar(width = 1, stat = "identity") +
+  geom_text(aes(label = paste0(percentage, "%")), position = position_stack(vjust = 0.5)) +
+  coord_polar("y") +
+  theme_void() + 
+  scale_fill_manual(values = FeatureType_palette) +  # Change the color palette (you can choose other palettes)
+  labs(title = "COMMON - Feature Type")
+```
+
+## By PROTOCOL
+### Fixed
+```{r}
+# Subsetting
+seurat_obj_fixed <- subset(seurat_obj, subset = sample_protocol == "Fixed")
+genes_common_data_fixed <- rowMeans(seurat_obj_fixed[["RNA"]]@data[genes_common,])
+length(genes_common_data_fixed)
+print(summary(genes_common_data_fixed))
+
+# Plot
+gcommon_num_fix <- genes_common_data_fixed
+names(gcommon_num_fix) <- NULL
+plot(density(gcommon_num_fix), log="x")
+```
+
+### Fresh
+```{r}
+seurat_obj_fresh <- subset(seurat_obj, subset = sample_protocol == "Fresh")
+genes_common_data_fresh <- rowMeans(seurat_obj_fresh[["RNA"]]@data[genes_common,])
+length(genes_common_data_fresh)
+print(summary(genes_common_data_fresh))
+
+#Plot
+gcommon_num_fresh <- genes_common_data_fresh
+names(gcommon_num_fresh) <- NULL
+plot(density(gcommon_num_fresh), log="x")
+```
+
+### Statistical comparison
+```{r}
+# Perform a Wilcoxon rank-sum test
+wilcox_test_result <- wilcox.test(gcommon_num_fix, gcommon_num_fresh, alternative = "greater")
+
+# Display the results
+print(wilcox_test_result)
+```
+
+
+# Captured genes EXCLUSIVE by PROTOCOL
+## Fixed
+```{r}
+# Subsetting
+genes_fixncut_unique <-  genes_lib_df %>% 
+  filter(Fresh == 0 & Fixed == 1)
+genes_fixncut_unique <- rownames(genes_fixncut_unique)
+length(genes_fixncut_unique)
+
+genes_fixncut_data <- rowMeans(seurat_obj_fixed[["RNA"]]@data[genes_fixncut_unique,])
+print(summary(genes_fixncut_data))
+
+#Plot
+gfixed_num <- genes_fixncut_data
+names(gfixed_num) <- NULL
+plot(density(gfixed_num), log="x")
+```
+
+
+```{r}
+# Display the top 25 genes
+head(genes_fixncut_unique, 25)
+```
+
+```{r}
+genes_fixncut_unique_df <- left_join(as.data.frame(genes_fixncut_unique), musmusculus_genes_df[c("Symbol", "Feature Type")],
+                                     by = c("genes_fixncut_unique" = "Symbol"), all.x = TRUE)
+
+# Replace NA values with "NA" string
+genes_fixncut_unique_df$`Feature Type`[is.na(genes_fixncut_unique_df$`Feature Type`)] <- "NA"
+
+dim(genes_fixncut_unique_df)
+head(genes_fixncut_unique_df)
+
+
+genes_fixncut_unique_df <- genes_fixncut_unique_df %>%
+  mutate(FeatureType = `Feature Type`)
+
+
+genes_fixncut_unique_df <- genes_fixncut_unique_df %>%
+  mutate(FeatureType = case_when(
+    FeatureType == "lncRNA gene" ~ "non-coding RNA gene: lncRNA",
+    FeatureType == "antisense lncRNA gene" ~ "non-coding RNA gene: lncRNA",
+    FeatureType == "lincRNA gene" ~ "non-coding RNA gene: lncRNA",
+    FeatureType == "sense intronic lncRNA gene" ~ "non-coding RNA gene: lncRNA",
+    FeatureType == "sense overlapping lncRNA gene" ~ "non-coding RNA gene: lncRNA",
+    FeatureType == "bidirectional promoter lncRNA gene" ~ "non-coding RNA gene: lncRNA",
+    FeatureType == "non-coding RNA gene" ~ "non-coding RNA gene: others",    
+    TRUE ~ as.character(FeatureType)
+  ))
+
+# Turn FeatureType into a factor and reorder levels
+genes_fixncut_unique_df <- genes_fixncut_unique_df %>%
+  mutate(FeatureType = factor(FeatureType, levels = c(
+    "protein coding gene",
+    "non-coding RNA gene: lncRNA",
+    "non-coding RNA gene: others",
+    "gene segment",
+    "NA"
+  )))
+
+fixncut_percentage_data <- count(genes_fixncut_unique_df, FeatureType) %>%
+  mutate(percentage = round(n / sum(n) * 100),1)
+
+ggplot(fixncut_percentage_data, aes(x = "", y = n, fill = FeatureType)) +
+  geom_bar(width = 1, stat = "identity") +
+  geom_text(aes(label = paste0(percentage, "%")), position = position_stack(vjust = 0.5)) +
+  coord_polar("y") +
+  theme_void() + 
+  scale_fill_manual(values = FeatureType_palette) +  # Change the color palette (you can choose other palettes)
+  labs(title = "FixNCut - Feature Type")
+```
+
+
+## Fresh
+```{r}
+# Subsetting
+genes_fresh_unique <- genes_lib_df %>% 
+  filter(Fresh == 1 & Fixed == 0)
+genes_fresh_unique <- rownames(genes_fresh_unique)
+length(genes_fresh_unique)
+
+genes_fresh_data <- rowMeans(seurat_obj_fresh[["RNA"]]@data[genes_fresh_unique,])
+print(summary(genes_fresh_data))
+
+# Plots
+gfresh_num <- genes_fresh_data
+names(gfresh_num) <- NULL
+plot(density(gfresh_num), log="x")
+```
+
+
+```{r}
+# Display the top 25 genes
+head(genes_fresh_unique, 25)
+```
+
+
+```{r}
+genes_fresh_unique_df <- left_join(as.data.frame(genes_fresh_unique), musmusculus_genes_df[c("Symbol", "Feature Type")], by = c("genes_fresh_unique" = "Symbol"), all.x = TRUE)
+
+# Replace NA values with "NA" string
+genes_fresh_unique_df$`Feature Type`[is.na(genes_fresh_unique_df$`Feature Type`)] <- "NA"
+
+dim(genes_fresh_unique_df)
+head(genes_fresh_unique_df)
+
+
+genes_fresh_unique_df <- genes_fresh_unique_df %>%
+  mutate(FeatureType = `Feature Type`)
+
+genes_fresh_unique_df <- genes_fresh_unique_df %>%
+  mutate(FeatureType = case_when(
+    FeatureType == "lncRNA gene" ~ "non-coding RNA gene: lncRNA",
+    FeatureType == "antisense lncRNA gene" ~ "non-coding RNA gene: lncRNA",
+    FeatureType == "lincRNA gene" ~ "non-coding RNA gene: lncRNA",
+    FeatureType == "sense intronic lncRNA gene" ~ "non-coding RNA gene: lncRNA",
+    FeatureType == "sense overlapping lncRNA gene" ~ "non-coding RNA gene: lncRNA",
+    FeatureType == "bidirectional promoter lncRNA gene" ~ "non-coding RNA gene: lncRNA",
+    FeatureType == "non-coding RNA gene" ~ "non-coding RNA gene: others",    
+    TRUE ~ as.character(FeatureType)
+  ))
+
+# Turn FeatureType into a factor and reorder levels
+genes_fresh_unique_df <- genes_fresh_unique_df %>%
+  mutate(FeatureType = factor(FeatureType, levels = c(
+    "protein coding gene",
+    "non-coding RNA gene: lncRNA",
+    "non-coding RNA gene: others",
+    "gene segment",
+    "NA"
+  )))
+
+
+fresh_percentage_data <- count(genes_fresh_unique_df, FeatureType) %>%
+  mutate(percentage = round(n / sum(n) * 100),1)
+
+ggplot(fresh_percentage_data, aes(x = "", y = n, fill = FeatureType)) +
+  geom_bar(width = 1, stat = "identity") +
+  geom_text(aes(label = paste0(percentage, "%")), position = position_stack(vjust = 0.5)) +
+  coord_polar("y") +
+  theme_void() + 
+  scale_fill_manual(values = FeatureType_palette) +  # Change the color palette (you can choose other palettes)
+  labs(title = "FRESH - Feature Type")
+```
+
+# Session Info
+```{r}
+sessionInfo()
+```

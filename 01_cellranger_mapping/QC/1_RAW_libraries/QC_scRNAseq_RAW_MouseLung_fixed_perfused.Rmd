@@ -24,8 +24,12 @@ In this Rmarkdown document, we are going to
 ```{r warning = FALSE, message = FALSE}
 library(tidyverse)
 library(Seurat)
-library(scales)
 library(gt)
+library(scales)
+library(DropletUtils)
+library(scuttle)
+library(Rcpp)
+sourceCpp("downsample_run.cpp")
 ```
 
 ## Parameters
@@ -40,31 +44,28 @@ source(here::here("bin/utils.R"))
 set.seed(1234) # for reproducibility 
 
 palette_color_factor <- c("Fresh" = "#66C2A5", 
-                          "Fixed" ="#FC8D62",
-                          "Cryo" ="#8DA0CB",
-                          "Fixed+Cryo" = "#E78AC3")
+                          "Fixed" ="#FC8D62")
 ```
 
 ## Load metadata
-The data used in this Rmarkdown document comes from **FIX&CUT** dataset.
+The data used in this Rmarkdown document comes from **SCGTEST_33** dataset.
 ```{r}
 # Load all metadata information
 metadata <- read.csv(path_project_metadata)
 
 # Merging metadata tables
 metadata <- metadata %>% 
-  filter(subproject == "THREETR_27"
-         & tissue == "Colon")
+  filter(subproject == "SCGTEST_33"
+         & tissue == "Lung"
+         & ( sample_protocol == "Fresh" | sample_protocol == "Fix&Cut_24h"))
 
 
 # Modify metadata
-metadata$library_name[metadata$library_name == "Human colon_fresh"] <- "Fresh"
-metadata$library_name[metadata$library_name == "Human colon_fixed"] <- "Fixed"
-metadata$library_name[metadata$library_name == "Human colon_cryopreserved"] <- "Cryo"
-metadata$library_name[metadata$library_name == "Human colon_fixed_cryopreserved"] <- "Fixed+Cryo"
+metadata$library_name[metadata$library_name == "Lung_fresh"] <- "Fresh"
+metadata$library_name[metadata$library_name == "Lung_fixed_24h"] <- "Fixed"
 
-metadata$library <- metadata$library_name
-# sample_protocol
+metadata$sample_protocol <- metadata$library_name
+
 
 print("Libraries/Samples metadata")
 DT::datatable(metadata, options = list(scrollX = TRUE))
@@ -83,140 +84,161 @@ This can be achieved by applying the `downsampleReads` function to the molecule 
 
 
 ```{r}
-seq_list <- c(10000000, 20000000, 30000000, 40000000, 50000000, 60000000, 70000000, 80000000)
-#prop_list <- c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1)
+set.seed(0123)
 
-seqreads_genes_df <- data.frame(matrix(ncol = 3, nrow = 0))
-colnames(seqreads_genes_df) <- c("sequenced_reads", "detected_genes", "library")
+seq_list <- c(10000000, 20000000, 30000000, 40000000, 50000000, 60000000, 70000000, 80000000,
+              90000000, 100000000, 110000000, 120000000)
+seqreads_genes_df <- data.frame(matrix(ncol = 4, nrow = 0))
+colnames(seqreads_genes_df) <- c("sequenced_reads", "detected_genes", "detected_umis", "sample_protocol")
 
-for (library in metadata$library_name) {
-  print(library)
-  gem_id <- unique(metadata$gem_id[metadata$library_name == library])
-  subproject <- unique(metadata$subproject[metadata$library_name == library])
-
-  path_general <- here::here(paste0("01_cellranger_mapping/subprojects/", subproject, "/jobs"))
+for (protocol in metadata$sample_protocol) {
+  print(protocol)
+  gem_id <- unique(metadata$gem_id[metadata$sample_protocol == protocol])
+  path_general <- here::here("01_cellranger_mapping/subprojects/SCGTEST_33/jobs")
   mol.info.path <- paste(path_general, gem_id, gem_id, "outs/per_sample_outs", gem_id, "count/sample_molecule_info.h5", sep = "/")
-  mol.info.file <- DropletUtils::read10xMolInfo(mol.info.path)
+  mol.info.file <- read10xMolInfo(mol.info.path)
   
   all_reads <- sum(mol.info.file$data$reads)
   print(all_reads)
   prop_list <- seq_list / all_reads
 
-  for (proportion in prop_list) {
-    #print(proportion)
+  for (prop in prop_list) {
     
-    sequenced_reads <- all_reads*proportion
-    #print(sequenced_reads)
+    sequenced_reads <- all_reads*prop
+    downsampled_reads <- downsample_run(mol.info.file$data$reads, prop = prop)
+    detected_genes <- length(unique(mol.info.file$data$gene[downsampled_reads>0]))
+    detected_umis <- sum(downsampled_reads>0) # == nrow(unique(mol.info.file$data[downsampled_reads>0, c("cell", "umi")]))
     
-    with.sampling <- DropletUtils::downsampleReads(mol.info.path, prop=proportion)
-
-    m <- rowSums(with.sampling)
-    detected_genes <- length(m[m > 0])
-    #print(detected_genes)
-
-    seqreads_genes_df[nrow(seqreads_genes_df)+1, ] <- c(sequenced_reads, detected_genes, library)
+    seqreads_genes_df[nrow(seqreads_genes_df)+1, ] <- c(sequenced_reads, detected_genes, detected_umis, protocol)
   }
 }
 
 seqreads_genes_df$sequenced_reads <- as.integer(seqreads_genes_df$sequenced_reads)
 seqreads_genes_df$detected_genes <- as.integer(seqreads_genes_df$detected_genes)
+seqreads_genes_df$detected_umis <- as.integer(seqreads_genes_df$detected_umis)
 
-head(seqreads_genes_df)
-```
-
-
-
-```{r}
-for (protocol in metadata$library_name) {
-  fit1 <- lm(formula =  detected_genes ~ sequenced_reads, data = seqreads_genes_df[seqreads_genes_df$library == protocol, ])
-  #summary(fit1)
-  slope <- round(coef(fit1)[2], digits = 6)
-  print(slope)
-
-  index <- rownames(seqreads_genes_df[seqreads_genes_df$library == protocol, ][which.max(seqreads_genes_df[seqreads_genes_df$library == protocol, ]$sequenced_reads), ])
-  seqreads_genes_df[index, "slope_gene"] <- slope
-}
+seqreads_genes_df$sample_protocol[seqreads_genes_df$sample_protocol == "Fix&Cut_24h"] <- "Fixed"
 
 head(seqreads_genes_df)
 write_csv(x = seqreads_genes_df,
-          file = "tables/HumanColon_LibGenesvsReads.csv")
+          file = "tables/MouseLung_fixed_perfused_LibGenesUMIvsReads.csv")
 ```
 
+
 ## # Genes / Seq reads
-
 ```{r fig.width=8, fig.height=5}
-seqreads_genes_df <- read.csv("tables/HumanColon_LibGenesvsReads.csv")
+seqreads_genes_df <- read.csv("tables/MouseLung_fixed_perfused_LibGenesUMIvsReads.csv")
 
-seqreads_genes_df$library[seqreads_genes_df$library == "Cryopreserved"] <- "Cryo"
-seqreads_genes_df$library[seqreads_genes_df$library == "Fixed+Cryopreserved"] <- "Fixed+Cryo"
-seqreads_genes_df$library <- factor(x = seqreads_genes_df$library, 
-                                    levels = c("Fresh", "Fixed", "Cryo","Fixed+Cryo"))
-
-seqreads_genes_df %>%
-  ggplot(aes(x = sequenced_reads, y = detected_genes, color = library, fill=library, label=slope_gene)) +
-  geom_point() +
-  geom_smooth(se = TRUE) +
-  scale_y_continuous(labels = scales::comma) + 
-  scale_x_continuous(labels = scales::comma) +
-  theme_classic() +
-  scale_color_manual(values = palette_color_factor) +
-  scale_fill_manual(values = palette_color_factor) +
-  labs(x = "# Sequencing Reads",
-     y = "# Detected Genes",
-     color = "Protocol") +
-    theme(axis.title = element_text(size = 14),
-          axis.text = element_text(size = 10),
-          strip.placement = "outside",
-          strip.background = element_rect(colour = NA),
-          legend.position = c(0.85, 0.2),
-          legend.text = element_text(size = 12),
-          legend.title=element_blank()) +
-    guides(fill = guide_legend(override.aes = list(color = NA), reverse = TRUE), 
-                      linetype = guide_legend(override.aes = list(color = "black", fill=NA)),
-           color = FALSE
-           )
-
-
-seqreads_genes_df %>%
-  ggplot(aes(x = sequenced_reads, y = detected_genes, color = library,  fill=library)) + # label = slope_gene,
+gg_genes <- seqreads_genes_df %>%
+  ggplot(aes(x = sequenced_reads, y = detected_genes, color = sample_protocol)) + 
   geom_point(size=4) +
-  scale_x_log10(labels = label_number(scale = 1e-6), breaks = seq(10000000, 130000000, by = 20000000)) +
-  stat_smooth(method='lm', se = TRUE, size = 1) +
+  geom_smooth(se = FALSE) +
+  #scale_y_continuous(labels = scales::comma) + 
+  scale_x_continuous(labels = label_number(scale = 1e-6), breaks = seq(0, 130000000, by = 20000000)) +
   theme_classic() +
   scale_color_manual(values = palette_color_factor) +
   scale_fill_manual(values = palette_color_factor) +
-  #geom_text() + 
-  labs(x = "# Sequencing Reads (in millions)",
+  labs(x = "",
      y = "# Detected Genes",
      color = "Protocol") +
     theme(axis.title = element_text(size = 18),
           axis.text = element_text(size = 14),
           strip.placement = "outside",
-          strip.background = element_rect(colour = NA),
+          strip.background = element_rect(colour = NA),          
           legend.position = c(0.9, 0.2),
           legend.text = element_text(size = 16),
-          legend.title=element_blank()) +
-    guides(fill = guide_legend(override.aes = list(color = NA), reverse = TRUE), 
-           color = FALSE
-           )
+          legend.title=element_blank())
 
-ggsave("figs/HumanColon_LibGenesvsReads.svg",
+
+gg_umis <- seqreads_genes_df %>%
+  ggplot(aes(x = sequenced_reads, y = detected_umis, color = sample_protocol)) + 
+  geom_point(size=4) +
+  geom_smooth(se = FALSE) +
+  scale_y_continuous(labels = label_number(scale = 1)) + 
+  scale_x_continuous(labels = label_number(scale = 1e-6), breaks = seq(0, 130000000, by = 20000000)) +
+  theme_classic() +
+  scale_color_manual(values = palette_color_factor) +
+  scale_fill_manual(values = palette_color_factor) +
+  labs(x = "# Sequencing Reads (in millions)",
+     y = "# Detected UMIs",
+     color = "Protocol") +
+    theme(axis.title = element_text(size = 18),
+          axis.text = element_text(size = 14),
+          strip.placement = "outside",
+          strip.background = element_rect(colour = NA),
+          legend.position = "none")
+
+
+gg <- gridExtra::grid.arrange(gg_genes, gg_umis, ncol = 1)
+
+ggsave(plot=gg,  filename = "figs/MouseLung_fixed_perfused_LibGenesUMIvsReads.svg",
        width = 8, height = 5,
        dpi = 300)
+```
+
+## Statistics
+```{r}
+seqreads_genes_df <- read.csv("tables/MouseLung_fixed_perfused_LibGenesUMIvsReads.csv")
+
+## (1) statistical tests
+# Perform a Mann-Whitney U test for genes between Fresh and Fixed samples
+wilcoxon_genes <- wilcox.test(detected_genes ~ sample_protocol, data = seqreads_genes_df)
+print(wilcoxon_genes)
+#print(wilcoxon_genes$p.value)
+
+# Perform a Mann-Whitney U test for UMIs between Fresh and Fixed samples
+wilcoxon_umis <- wilcox.test(detected_umis ~ sample_protocol, data = seqreads_genes_df)
+print(wilcoxon_umis)
+#print(wilcoxon_umis$p.value)
+
+
+
+## (2) fit a regression model & if the confidence intervals overlap, suggesting no significant difference.
+# Fit linear regression models
+model_fresh_genes <- lm(detected_genes ~ sequenced_reads, data = subset(seqreads_genes_df, sample_protocol == "Fresh"))
+model_fixed_genes <- lm(detected_genes ~ sequenced_reads, data = subset(seqreads_genes_df, sample_protocol == "Fixed"))
+
+# Obtain confidence intervals for the coefficient of X
+ci_model_fresh_genes<- confint(model_fresh_genes)["sequenced_reads", ]
+ci_model_fixed_genes <- confint(model_fixed_genes)["sequenced_reads", ]
+print("detected_genes")
+print(ci_model_fresh_genes)
+print(ci_model_fixed_genes)
+
+# Check if confidence intervals overlap
+ci_overlap_genes <- ci_model_fresh_genes[2] > ci_model_fixed_genes[1] && ci_model_fixed_genes[2] > ci_model_fresh_genes[1]
+ci_overlap_genes
+
+
+# Fit linear regression models
+model_fresh_umis <- lm(detected_umis ~ sequenced_reads, data = subset(seqreads_genes_df, sample_protocol == "Fresh"))
+model_fixed_umis <- lm(detected_umis ~ sequenced_reads, data = subset(seqreads_genes_df, sample_protocol == "Fixed"))
+
+# Obtain confidence intervals for the coefficient of X
+ci_model_fresh_umis <- confint(model_fresh_umis)["sequenced_reads", ]
+ci_model_fixed_umis <- confint(model_fixed_umis)["sequenced_reads", ]
+print("detected_umis")
+print(ci_model_fresh_umis)
+print(ci_model_fixed_umis)
+
+# Check if confidence intervals overlap
+ci_overlap_umis <- ci_model_fresh_umis[2] > ci_model_fixed_umis[1] && ci_model_fixed_umis[2] > ci_model_fresh_umis[1]
+ci_overlap_umis
 ```
 
 
 # CELLRANGER OUTPUT -- Unfiltered
 ```{r}
 cell_info_df <- data.frame(matrix(ncol = 7, nrow = 0))
-colnames(cell_info_df) <- c("cell", "reads", "umi", "gene", "library", "library", "replicate")
+colnames(cell_info_df) <- c("cell", "reads", "umi", "gene", "library")
 
 
 for (library in metadata$library_name) {
   #print(protocol)
   gem_id <- unique(metadata$gem_id[metadata$library_name == library])
   subproject <- unique(metadata$subproject[metadata$library_name == library])
-  protocol <- unique(metadata$library[metadata$library_name == library])
+  protocol <- unique(metadata$sample_protocol[metadata$library_name == library])
+  replicate <- unique(metadata$replicate[metadata$library_name == library])
 
   path_general <- here::here(paste0("01_cellranger_mapping/subprojects/", subproject, "/jobs"))
   mol.info.path <- paste(path_general, gem_id, gem_id, "outs/per_sample_outs", gem_id, "count/sample_molecule_info.h5", sep = "/")
@@ -243,8 +265,9 @@ for (library in metadata$library_name) {
   df <- full_join(reads_cell_df, umi_cell_df, by = "cell")
   df <- full_join(df, gene_cell_df, by = "cell")
   df$library <- library
-  df$library <- protocol
-
+  df$sample_protocol <- protocol
+  df$replicate <- replicate
+  
 
   # Information
   #sum(df$reads)
@@ -261,9 +284,10 @@ head(cell_info_df)
 ```{r}
 # Computing slope genes
 for (library in metadata$library_name) {
-  fit1 <- lm(formula =  gene ~ reads, data = cell_info_df[cell_info_df$library == library, ])
+  fit1 <- lm(formula =  log10(gene) ~ log10(reads), data = cell_info_df[cell_info_df$library == library, ])
   #summary(fit1)
-  slope <- round(coef(fit1)[2], digits = 5)
+  print(library)
+  slope <- round(coef(fit1)[2], digits = 4)
   print(slope)
 
   index <- rownames(cell_info_df[cell_info_df$library == library, ][which.max(cell_info_df[cell_info_df$library == library, ]$reads), ])
@@ -272,9 +296,10 @@ for (library in metadata$library_name) {
 
 # Computing slope UMIs
 for (library in metadata$library_name) {
-  fit1 <- lm(formula =  umi ~ reads, data = cell_info_df[cell_info_df$library == library, ])
+  fit1 <- lm(formula =  log10(umi) ~ log10(reads), data = cell_info_df[cell_info_df$library == library, ])
   #summary(fit1)
-  slope <- round(coef(fit1)[2], digits = 5)
+  print(library)
+  slope <- round(coef(fit1)[2], digits = 4)
   print(slope)
 
   index <- rownames(cell_info_df[cell_info_df$library == library, ][which.max(cell_info_df[cell_info_df$library == library, ]$reads), ])
@@ -283,21 +308,17 @@ for (library in metadata$library_name) {
 
 head(cell_info_df)
 write_csv(x = cell_info_df,
-          file = "tables/HumanColon_LibGenes-UMIsvsReadsCell.csv")
+          file = "tables/MouseLung_fixed_perfused_LibGenes-UMIsvsReadsCell.csv")
 ```
 
 
 ## # Genes / # Seq reads (per cell)
 ```{r fig.width=8, fig.height=5}
-cell_info_df <- read.csv("tables/HumanColon_LibGenes-UMIsvsReadsCell.csv")
-
-cell_info_df$library[cell_info_df$library == "Cryopreserved"] <- "Cryo"
-cell_info_df$library[cell_info_df$library == "Fixed+Cryopreserved"] <- "Fixed+Cryo"
-cell_info_df$library <- factor(x = cell_info_df$library, levels = c("Fresh", "Fixed", "Cryo", "Fixed+Cryo"))
+cell_info_df <- read.csv("tables/MouseLung_fixed_perfused_LibGenes-UMIsvsReadsCell.csv")
 
 gg <- cell_info_df %>%
   ggplot(aes(x = reads, y = gene, color = library, fill = library)) +
-  geom_point(alpha=0.05) + 
+  geom_point(alpha=0.1) + 
   #geom_rug() +
   scale_color_manual(values = palette_color_factor) +
   scale_fill_manual(values = palette_color_factor) +
@@ -312,16 +333,16 @@ gg <- cell_info_df %>%
           axis.text = element_text(size = 12),
           strip.placement = "outside",
           strip.background = element_rect(colour = NA),
-          legend.position = c(0.85, 0.2),
+          legend.position = c(0.85, 0.25),
           legend.text = element_text(size = 14),
           legend.title=element_blank()) +
     guides(fill = guide_legend(override.aes = list(color = NA), reverse = TRUE), 
-           linetype = guide_legend(override.aes = list(color = "black", fill=NA)),
            color = FALSE
            )
+  
 ggExtra::ggMarginal(gg, groupColour = TRUE, groupFill = TRUE)
 
-ggsave("figs/HumanColon_LibGenesvsReadsCell.svg",
+ggsave("figs/MouseLung_fixed_perfused_LibGenesvsReadsCell.svg",
        width = 8, height = 5,
        dpi = 300)
 ```
@@ -329,15 +350,11 @@ ggsave("figs/HumanColon_LibGenesvsReadsCell.svg",
 ## # UMIs / # Seq reads (per cell)
 
 ```{r fig.width=8, fig.height=5}
-cell_info_df <- read.csv("tables/HumanColon_LibGenes-UMIsvsReadsCell.csv")
-
-cell_info_df$library[cell_info_df$library == "Cryopreserved"] <- "Cryo"
-cell_info_df$library[cell_info_df$library == "Fixed+Cryopreserved"] <- "Fixed+Cryo"
-cell_info_df$library <- factor(x = cell_info_df$library, levels = c("Fresh", "Fixed", "Cryo", "Fixed+Cryo"))
+cell_info_df <- read.csv("tables/MouseLung_fixed_perfused_LibGenes-UMIsvsReadsCell.csv")
 
 gg <- cell_info_df %>%
   ggplot(aes(x = reads, y = umi, color = library, fill = library)) +
-  geom_point(alpha=0.05) + 
+  geom_point(alpha=0.1) + 
   #geom_rug() +
   scale_color_manual(values = palette_color_factor) +
   scale_fill_manual(values = palette_color_factor) +
@@ -352,17 +369,15 @@ gg <- cell_info_df %>%
           axis.text = element_text(size = 12),
           strip.placement = "outside",
           strip.background = element_rect(colour = NA),
-          legend.position = c(0.85, 0.2),
+          legend.position = c(0.85, 0.25),
           legend.text = element_text(size = 14),
           legend.title=element_blank()) +
     guides(fill = guide_legend(override.aes = list(color = NA), reverse = TRUE), 
-                      linetype = guide_legend(override.aes = list(color = "black", fill=NA)),
            color = FALSE
            )
-           
 ggExtra::ggMarginal(gg, groupColour = TRUE, groupFill = TRUE)
 
-ggsave("figs/HumanColon_LibUMIsvsReadsCell.svg",
+ggsave("figs/MouseLung_fixed_perfused_LibUMIsvsReadsCell.svg",
        width = 8, height = 5,
        dpi = 300)
 ```
@@ -371,7 +386,7 @@ ggsave("figs/HumanColon_LibUMIsvsReadsCell.svg",
 # CELLRANGER OUTPUT -- Filtered (Cellranger)
 ```{r}
 # Load Seurat object
-seurat_obj <- readRDS(here::here("02_QC/results/R_objects/FIXnCUT_HumanColon_merged.rds"))
+seurat_obj <- readRDS(here::here("02_QC/results/R_objects/FIXnCUT_MouseLung_fixed_perfused_merged.rds"))
 seurat_obj
 ```
 
@@ -397,7 +412,7 @@ for (size in size_list) {
 
     for (var in 1:50) {
       seurat_obj_sub_n <- subset(x = seurat_obj_sub, downsample = size)
-      #print(table(seurat_obj_sub$library))
+      #print(table(seurat_obj_sub$sample_protocol))
   
       m <- rowSums(seurat_obj_sub_n@assays$RNA@counts != 0)
       detected_genes <- length(m[m > 0])
@@ -416,41 +431,38 @@ detectedgenes_df
 detectedgenes_df$num_cells <- as.integer(rownames(detectedgenes_df))
 
 detectedgenes <- detectedgenes_df %>% 
-  gather(key = "library_name", value = "detected_genes", `Cryopreserved`:`Fresh`)
+  gather(key = "library_name", value = "detected_genes", `Fixed`:`Fresh`)
+
+detectedgenes$sample_protocol <- detectedgenes$library_name
 
 head(detectedgenes)
 write_csv(x = detectedgenes,
-          file = "tables/HumanColon_CumulativeGenes.csv")
+          file = "tables/MouseLung_fixed_perfused_CumulativeGenes.csv")
 ```
 
+
 ## Cumulative # Genes / # cells
-
 ```{r fig.width=8, fig.height=5}
-detectedgenes <- read.csv("tables/HumanColon_CumulativeGenes.csv")
-
-detectedgenes$library_name[detectedgenes$library_name == "Cryopreserved"] <- "Cryo"
-detectedgenes$library_name[detectedgenes$library_name == "Fixed+Cryopreserved"] <- "Fixed+Cryo"
-detectedgenes$library_name <- factor(x = detectedgenes$library_name, levels = c("Fresh", "Fixed", "Cryo","Fixed+Cryo"))
-
+detectedgenes <- read.csv("tables/MouseLung_fixed_perfused_CumulativeGenes.csv")
 
 detectedgenes %>% 
-  ggplot(aes(x = num_cells, y = detected_genes, color = library_name)) +
+  ggplot(aes(x = num_cells, y = detected_genes, color = sample_protocol)) +
   geom_point(size=3) +
-  scale_fill_manual(values = palette_color_factor) +
   scale_color_manual(values = palette_color_factor) +
-  labs(x = "Number of sampled cells",
-     y = "Detected genes") +
+  scale_fill_manual(values = palette_color_factor) +
+  labs(x = "# Sampled Cells",
+     y = "# Detected Genes") +
   theme_classic() +
-    theme(axis.title = element_text(size = 18),
-          axis.text = element_text(size = 14),
+  theme(axis.title = element_text(size = 16),
+          axis.text = element_text(size = 12),
           strip.placement = "outside",
           strip.background = element_rect(colour = NA),
           legend.position = c(0.9, 0.2),
-          legend.text = element_text(size = 16),
+          legend.text = element_text(size = 14),
           legend.title=element_blank()) +
     guides(color = guide_legend(override.aes = list(fill = NA), reverse = TRUE))
 
-ggsave("figs/HumanColon_CumulativeGenes.svg",
+ggsave("figs/MouseLung_fixed_perfused_CumulativeGenes.svg",
        width = 8, height = 5,
        dpi = 300)
 ```
@@ -466,27 +478,13 @@ table_qc_gex(seurat_obj@meta.data, subtitle = "After cell QC filtering out")
 ```{r fig.height=6, fig.width=20}
 VlnPlot(seurat_obj,
         features = c("nCount_RNA", "nFeature_RNA", "pct_mt", "pct_rb"),
-        group.by = "library_name",
+        group.by = "sample_protocol",
         pt.size = 0.01,
-        log = T,
+        log = TRUE,
         ncol = 4
         ) &
-  scale_fill_manual(values = palette_color_factor) &
-  theme(axis.text.x = element_text(angle = 0, hjust = 0.5),
-          axis.title = element_blank())
-  #theme_classic() &
-  #ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",
-  #                               label = "p.format", label.y.npc = 0.95)
-
-VlnPlot(seurat_obj,
-        features = c("nCount_RNA", "nFeature_RNA", "pct_mt", "pct_rb"),
-        group.by = "library_name",
-        pt.size = 0.01,
-        log = F,
-        ncol = 4
-        ) &
-  scale_fill_manual(values = palette_color_factor) &
-  theme(axis.text.x = element_text(angle = 0, hjust = 0.5),
+    scale_fill_brewer(palette = "Set2") &
+    theme(axis.text.x = element_text(angle = 0, hjust = 0.5),
           axis.title = element_blank())
   #theme_classic() &
   #ggpubr::stat_compare_means(ref.group = "Fresh", method = "wilcox.test",

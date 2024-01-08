@@ -159,7 +159,7 @@ venndiagram <- VennDiagram::venn.diagram(
   x = list(fresh_HVG, fixed_HVG),
   category.names = c("Fresh", "Fixed"),
   filename = NULL,
-  fill = c("#FC8D62", "#66C2A5"),
+  fill = c("#66C2A5", "#FC8D62"),
   lty = 'blank',
   
   cex = 1.5,  

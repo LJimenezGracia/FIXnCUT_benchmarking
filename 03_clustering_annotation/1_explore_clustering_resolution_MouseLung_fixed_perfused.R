@@ -42,7 +42,7 @@ color_palette = c("aquamarine", "orange", "lightgreen", "blueviolet", "maroon",
 
 # Load Data
 ## Load Seurat object
-seurat_obj <- readRDS(paste0(path_r_objects_in, "/FIXnCUT_MouseLung_fixed_lognorm_processed.rds"))
+seurat_obj <- readRDS(paste0(path_r_objects_in, "/FIXnCUT_MouseLung_fixed_perfused_lognorm_processed.rds"))
 DefaultAssay(seurat_obj) <- "RNA"
 
 
@@ -70,7 +70,7 @@ gg_umap_cluster_resolution <- DimPlot(object = seurat_obj,
                                       ) & NoLegend()
 
 # Save image
-ggsave(filename = paste0(path_r_figs, "/FIXnCUT_MouseLung_fixed_clustering_resolutions_umap.png"),
+ggsave(filename = paste0(path_r_figs, "/FIXnCUT_MouseLung_fixed_perfused_clustering_resolutions_umap.png"),
        plot = gg_umap_cluster_resolution,
        width = 25,
        height = 25)
@@ -79,5 +79,5 @@ ggsave(filename = paste0(path_r_figs, "/FIXnCUT_MouseLung_fixed_clustering_resol
 # Save cell-type biomarkers
 ## Export in .rds object
 saveRDS(seurat_obj, 
-        file = paste0(path_r_objects_out, "/FIXnCUT_MouseLung_fixed_clustering_resolutions.rds"))
-#seurat_obj <- readRDS(paste0(path_r_objects_out, "/FIXnCUT_MouseLung_fixed_clustering_resolutions.rds"))
+        file = paste0(path_r_objects_out, "/FIXnCUT_MouseLung_fixed_perfused_clustering_resolutions.rds"))
+#seurat_obj <- readRDS(paste0(path_r_objects_out, "/FIXnCUT_MouseLung_fixed_perfused_clustering_resolutions.rds"))

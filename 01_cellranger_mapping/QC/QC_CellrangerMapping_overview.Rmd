@@ -265,6 +265,21 @@ ggsave("figs/MouseLung_fixed_LibReads.svg",
 ```
 
 ```{r fig.height=5, fig.width=8}
+# Mouse Lung
+cellranger_metrics_gex_df_sub <- cellranger_metrics_gex_df[(cellranger_metrics_gex_df$subproject == "SCGTEST_33" &
+                                                            (cellranger_metrics_gex_df$sample_protocol == "Fresh" |
+                                                            cellranger_metrics_gex_df$sample_protocol == "Fix&Cut_24h")),]
+cellranger_metrics_gex_df_sub$library_name[cellranger_metrics_gex_df_sub$library_name == "Lung_fresh"] <- "Fresh"
+cellranger_metrics_gex_df_sub$library_name[cellranger_metrics_gex_df_sub$library_name == "Lung_fixed_24h"] <- "Fixed"
+
+plot_library_pct_reads(cellranger_metrics_gex_df_sub)
+ggsave("figs/MouseLung_fixed_perfused_LibReads.svg",
+       width = 8, height = 5,
+       dpi = 300)
+```
+
+
+```{r fig.height=5, fig.width=8}
 # Mouse Lung with Cryo
 cellranger_metrics_gex_df_sub <- cellranger_metrics_gex_df[(cellranger_metrics_gex_df$subproject == "SCGTEST_33" &
                                                             (cellranger_metrics_gex_df$sample_protocol != "Fresh" &

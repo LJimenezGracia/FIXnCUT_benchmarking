@@ -1,5 +1,5 @@
 ---
-title: "GEX Quality control: MouseLung_fixed"
+title: "GEX Quality control: MouseLung_fixed_perfused"
 author: "Laura Jiménez Gracia"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -43,11 +43,11 @@ path_r_objects <- here::here("02_QC/results/R_objects")
 source(here::here("bin/utils.R"))
 
 # Thresholds
-min_libsize <- 500
-max_libsize <- 25000
+min_libsize <- 400
+max_libsize <- 50000
 
-min_ngenes <- 250
-max_ngenes <- 6000
+min_ngenes <- 200
+max_ngenes <- 8000
 
 max_pctmt <- 20
 
@@ -56,30 +56,23 @@ min_cells <- 10
 
 
 ## Load data
-The data used in this Rmarkdown document comes from **SCGTEST_32 & SCGTEST_33** dataset, filtered matrices were processed with `cellranger v6.1.1`, and the doublet predictions were obtained using `scrublet`.
+The data used in this Rmarkdown document comes from **SCGTEST_33** dataset, filtered matrices were processed with `cellranger v6.1.1`, and the doublet predictions were obtained using `scrublet`.
 ```{r}
 # Load all metadata information
 metadata <- read.csv(path_project_metadata)
-subproject_folder_n <- "MouseLung_fixed"
+subproject_folder_n <- "MouseLung_fixed_perfused"
 
 # Merging metadata tables
 metadata <- metadata %>% 
-  filter((subproject == "SCGTEST_32" | subproject == "SCGTEST_33")
+  filter(subproject == "SCGTEST_33"
          & tissue == "Lung"
          & ( sample_protocol == "Fresh" | sample_protocol == "Fix&Cut_24h"))
 
 # Modify metadata
-metadata$library_name[metadata$library_name == "Lung_fresh_0"] <- "Fresh_1"
-metadata$library_name[metadata$library_name == "Lung_fresh"] <- "Fresh_2"
-metadata$library_name[metadata$library_name == "Lung_fixed_24h_0"] <- "Fixed_1"
-metadata$library_name[metadata$library_name == "Lung_fixed_24h"] <- "Fixed_2"
+metadata$library_name[metadata$library_name == "Lung_fresh"] <- "Fresh"
+metadata$library_name[metadata$library_name == "Lung_fixed_24h"] <- "Fixed"
 
-metadata$sample_protocol[metadata$library_name == "Fresh_1" | metadata$library_name == "Fresh_2"] <- "Fresh"
-metadata$sample_protocol[metadata$library_name == "Fixed_1" | metadata$library_name == "Fixed_2"] <- "Fixed"
-
-metadata$replicate[metadata$library_name == "Fresh_1" | metadata$library_name == "Fixed_1"] <- "Replicate 1"
-metadata$replicate[metadata$library_name == "Fresh_2" | metadata$library_name == "Fixed_2"] <- "Replicate 2"
-
+metadata$sample_protocol <- metadata$library_name
 
 print("Libraries/Samples metadata")
 DT::datatable(metadata, options = list(scrollX = TRUE))
@@ -92,10 +85,8 @@ aggr_csv_path <- paste0(path_cellranger_data, "/data/", subproject_folder_n, "_a
 metadata_aggr <- read.csv(aggr_csv_path)
 
 # Modify metadata
-metadata_aggr$library_name[metadata_aggr$library_name == "Lung_fresh_0"] <- "Fresh_1"
-metadata_aggr$library_name[metadata_aggr$library_name == "Lung_fresh"] <- "Fresh_2"
-metadata_aggr$library_name[metadata_aggr$library_name == "Lung_fixed_24h_0"] <- "Fixed_1"
-metadata_aggr$library_name[metadata_aggr$library_name == "Lung_fixed_24h"] <- "Fixed_2"
+metadata_aggr$library_name[metadata_aggr$library_name == "Lung_fresh"] <- "Fresh"
+metadata_aggr$library_name[metadata_aggr$library_name == "Lung_fixed_24h"] <- "Fixed"
 
 for (index in rownames(metadata_aggr)) {
   print(index)
@@ -145,7 +136,6 @@ seurat_obj$donor_id <- as.factor(seurat_obj_metadata$organism)
 seurat_obj$tissue <- as.factor(seurat_obj_metadata$tissue)
 seurat_obj$disease <- as.factor(seurat_obj_metadata$disease)
 seurat_obj$sample_protocol <- as.factor(seurat_obj_metadata$sample_protocol)
-seurat_obj$replicate <- as.factor(seurat_obj_metadata$replicate)
 ```
 
 
@@ -273,8 +263,8 @@ cowplot::plot_grid(gg_libsize, gg_libcomplex, gg_mt, gg_rb, ncol = 2)
 ## Save merged data
 ```{r}
 # Save Merged Seurat object
-saveRDS(seurat_obj, str_c(path_r_objects, "/FIXnCUT_MouseLung_fixed_merged.rds"))
-#seurat_obj <- readRDS(str_c(path_r_objects, "/FIXnCUT_MouseLung_fixed_merged.rds"))
+saveRDS(seurat_obj, str_c(path_r_objects, "/FIXnCUT_MouseLung_fixed_perfused_merged.rds"))
+#seurat_obj <- readRDS(str_c(path_r_objects, "/FIXnCUT_MouseLung_fixed_perfused_merged.rds"))
 ```
 
 
@@ -289,7 +279,7 @@ Finally, we would also explore the fraction of counts from ribosomal genes, but 
 ```{r fig.height=5, fig.width=14}
 ggdens_libsize <- seurat_obj@meta.data %>%
   ggplot(aes(x = nCount_RNA, fill = sample_protocol, color = sample_protocol)) +
-  facet_wrap(~replicate, nrow = 2) +
+  #facet_wrap(~replicate, nrow = 2) +
     geom_density(alpha = 0.2) + 
     scale_x_log10() +
     labs(x = "Library Size (Total UMI)",
@@ -321,7 +311,7 @@ The count depth (UMIs per cell) should generally be above 500 when 3' gene expre
 ggdens_ngenes <- seurat_obj@meta.data %>%
   ggplot(aes(x = nFeature_RNA, fill = sample_protocol, color = sample_protocol)) +
     geom_density(alpha = 0.2) + 
-  facet_wrap(~replicate, nrow = 2) +
+  #facet_wrap(~replicate, nrow = 2) +
     scale_x_log10() +
     labs(x = "Library complexity (Number of Detected Genes)",
          y = "Density") +
@@ -354,7 +344,7 @@ Ideally, the density distribution of high-quality data should contain a single l
 ggdens_pctmt <- seurat_obj@meta.data %>%
   ggplot(aes(x = pct_mt, fill = sample_protocol, color = sample_protocol)) +
     geom_density(alpha = 0.2) + 
-  facet_wrap(~replicate, nrow = 2) +
+  #facet_wrap(~replicate, nrow = 2) +
     labs(x = "% Mitochondrial Expression",
          y = "Density") +
     theme_pubr() +
@@ -385,7 +375,7 @@ High mitochondrial read fractions could be indicative of damaged/dying cells who
 ggdens_pctrb <- seurat_obj@meta.data %>%
   ggplot(aes(x = pct_rb, fill = sample_protocol, color = sample_protocol)) +
     geom_density(alpha = 0.2) + 
-  facet_wrap(~replicate, nrow = 2) +
+  #facet_wrap(~replicate, nrow = 2) +
     labs(x = "% Ribosomal Expression",
          y = "Density") +
     theme_pubr() +
@@ -648,8 +638,8 @@ seurat_obj
 # Save filtered data
 ```{r}
 # Save Merged Seurat object
-saveRDS(seurat_obj, str_c(path_r_objects, "/FIXnCUT_MouseLung_fixed_filtered.rds"))
-#seurat_obj <- readRDS(str_c(path_r_objects, "/FIXnCUT_MouseLung_fixed_filtered.rds"))
+saveRDS(seurat_obj, str_c(path_r_objects, "/FIXnCUT_MouseLung_fixed_perfused_filtered.rds"))
+#seurat_obj <- readRDS(str_c(path_r_objects, "/FIXnCUT_MouseLung_fixed_perfused_filtered.rds"))
 ```
 
 

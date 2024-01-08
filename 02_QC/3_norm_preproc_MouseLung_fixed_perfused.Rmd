@@ -1,5 +1,5 @@
 ---
-title: "Data normalization and pre-processing: MouseLung_fixed"
+title: "Data normalization and pre-processing: MouseLung_fixed_perfused"
 author: "Laura Jiménez Gracia"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -45,35 +45,30 @@ inferno_color_palette <- viridis::inferno(10)
 ```
 
 ## Load data
-The data used in this Rmarkdown document comes from **SCGTEST_32 & SCGTEST_33** dataset.
+The data used in this Rmarkdown document comes from **SCGTEST_33** dataset.
 ```{r}
 # Load all metadata information
 metadata <- read.csv(path_project_metadata)
-subproject_folder_n <- "MouseLung_fixed"
+subproject_folder_n <- "MouseLung_fixed_perfused"
 
 # Merging metadata tables
 metadata <- metadata %>% 
-  filter((subproject == "SCGTEST_32" | subproject == "SCGTEST_33")
+  filter(subproject == "SCGTEST_33"
          & tissue == "Lung"
          & ( sample_protocol == "Fresh" | sample_protocol == "Fix&Cut_24h"))
 
 # Modify metadata
-metadata$library_name[metadata$library_name == "Lung_fresh_0"] <- "Fresh_1"
-metadata$library_name[metadata$library_name == "Lung_fresh"] <- "Fresh_2"
-metadata$library_name[metadata$library_name == "Lung_fixed_24h_0"] <- "Fixed_1"
-metadata$library_name[metadata$library_name == "Lung_fixed_24h"] <- "Fixed_2"
+metadata$library_name[metadata$library_name == "Lung_fresh"] <- "Fresh"
+metadata$library_name[metadata$library_name == "Lung_fixed_24h"] <- "Fixed"
 
-metadata$sample_protocol[metadata$library_name == "Fresh_1" | metadata$library_name == "Fresh_2"] <- "Fresh"
-metadata$sample_protocol[metadata$library_name == "Fixed_1" | metadata$library_name == "Fixed_2"] <- "Fixed"
+metadata$sample_protocol <- metadata$library_name
 
-metadata$replicate[metadata$library_name == "Fresh_1" | metadata$library_name == "Fixed_1"] <- "Replicate 1"
-metadata$replicate[metadata$library_name == "Fresh_2" | metadata$library_name == "Fixed_2"] <- "Replicate 2"
 
 print("Libraries/Samples metadata")
 DT::datatable(metadata, options = list(scrollX = TRUE))
 
 # Load Seurat object
-seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_filtered.rds"))
+seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_perfused_filtered.rds"))
 seurat_obj
 ```
 
@@ -128,43 +123,6 @@ Next, we will filter a subset of features that exhibit high cell-to-cell variati
 ```{r}
 # Summary statistics of the number of features (genes) by cell
 summary(Matrix::colSums(seurat_obj@assays$RNA@data[, ] > 0))
-```
-
-
-## Independent HVF
-```{r fig.height=5, fig.width=10}
-seurat_obj_list <- SplitObject(seurat_obj, split.by = "library_name")
-
-# Fresh HVG -- # union ~3800 genes by sample_protocol
-seurat_obj_list$Fresh_1 <- FindVariableFeatures(seurat_obj_list$Fresh_1, nfeatures = 3000)
-fresh1_HVG <- VariableFeatures(seurat_obj_list$Fresh_1)
-
-seurat_obj_list$Fresh_2 <- FindVariableFeatures(seurat_obj_list$Fresh_2, nfeatures = 3000)
-fresh2_HVG <- VariableFeatures(seurat_obj_list$Fresh_2)
-
-# Fix&Cut HVG -- # union ~3800 genes by sample_protocol
-seurat_obj_list$Fixed_1 <- FindVariableFeatures(seurat_obj_list$Fixed_1, nfeatures = 3000)
-fixed1_HVG <- VariableFeatures(seurat_obj_list$Fixed_1)
-
-seurat_obj_list$Fixed_2 <- FindVariableFeatures(seurat_obj_list$Fixed_2, nfeatures = 3000)
-fixed2_HVG <- VariableFeatures(seurat_obj_list$Fixed_2)
-
-UpSetR::upset(
-  UpSetR::fromList(list(
-    "Fixed 2" = fixed2_HVG,
-    "Fixed 1" = fixed1_HVG,
-    "Fresh 2" = fresh2_HVG,
-    "Fresh 1" = fresh1_HVG
-  )),
-  nsets = 6,
-  order.by = "freq",
-  #group.by = "sets",
-  mainbar.y.label = "# HVG", sets.x.label = "# HVG / Library",
-  point.size = 4, line.size = 1, text.scale = 2,
-  empty.intersections = "on",
-  queries = list(
-     list(query = UpSetR::intersects, params = list("Fixed 1", "Fresh 1", "Fixed 2" , "Fresh 2"), color = "green", active = T) )
-)
 ```
 
 
@@ -262,17 +220,6 @@ DimPlot(
   seurat_obj,
   reduction = "pca",
   group.by = "library_name") +
-    scale_color_brewer(palette = "Spectral") +
-  labs(title = "", color = "")
-```
-
-
-```{r fig.width=15, fig.height=5}
-DimPlot(
-  seurat_obj,
-  reduction = "pca",
-  group.by = "sample_protocol",
-  split.by = "replicate") +
     scale_color_brewer(palette = "Set2") +
   labs(title = "", color = "")
 ```
@@ -337,16 +284,8 @@ DimPlot(seurat_obj,
                reduction = "umap",
                group.by = "library_name",
                pt.size = 0.01) +
-    scale_color_brewer(palette = "Spectral")
-```
-
-```{r fig.width=20, fig.height=5}
-# Visualizing UMAP
-DimPlot(seurat_obj, 
-               reduction = "umap",
-               group.by = c("library_name", "sample_protocol", "replicate"),
-               pt.size = 0.01) &
-    scale_color_brewer(palette = "Set1")
+    scale_color_brewer(palette = "Set2") +
+    labs(title = "", color = "")
 ```
 
 
@@ -360,6 +299,7 @@ DimPlot(seurat_obj,
     scale_color_brewer(palette = "Set2") +
     labs(title = "", color = "")
 ```
+
 
 Here, from the UMAP mapping, we cannot see the presence of library-specific effects that should not be present. But, we clearly see treatment/disease differences. Thus, we will integrate the different samples to harmonize these cells.
 
@@ -412,21 +352,6 @@ gg_doubletpred_umap <- DimPlot(
 
 cowplot::plot_grid(gg_doubletscore_umap,
                    gg_doubletpred_umap, ncol = 2)
-```
-
-
-## Assessing multiple confounder variables
-```{r fig.width=14, fig.height=7}
-# Multiple metadata variables
-DimPlot(
-  seurat_obj,
-  group.by = "sample_protocol",
-  split.by = "replicate",
-  pt.size = 0.2
-  ) +
-  labs(title = "",
-       color = "") + NoLegend() +
-  scale_color_brewer(palette = "Set2")
 ```
 
 
@@ -488,8 +413,8 @@ VlnPlot(seurat_obj,
 # Save processed Seurat objects
 ```{r}
 # Save processed lognorm Seurat object
-saveRDS(seurat_obj, paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_lognorm_processed.rds"))
-#seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_lognorm_processed.rds"))
+saveRDS(seurat_obj, paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_perfused_lognorm_processed.rds"))
+#seurat_obj <- readRDS(paste0(path_r_objects, "/FIXnCUT_MouseLung_fixed_perfused_lognorm_processed.rds"))
 ```
 
 
