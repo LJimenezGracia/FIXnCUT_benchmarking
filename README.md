@@ -1,7 +1,6 @@
 # FIXnCUT_benchmarking
 
 This is the GitHub repository for the **FixNCut: Single-cell genomics through reversible tissue fixation and dissociation** manuscript.
-*This manuscript is currently under review process.*
 
 
 ## Abstract
